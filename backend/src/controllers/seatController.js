@@ -1,7 +1,8 @@
+
 const seatModel = require("../models/seatModel");
 const db = require("../config/database");
 
-// ADMIN: generate kursi otomatis (misal prefix "A", max_number 15 -> A1..A15)
+// ADMIN: generate kursi otomatis
 const generateSeats = async (req, res) => {
   try {
     const { ticket_category_id } = req.params;
@@ -21,8 +22,14 @@ const generateSeats = async (req, res) => {
     });
 
     const seatRows = [];
+
     for (let i = 1; i <= max_number; i++) {
-      seatRows.push([ticket_category_id, seatPrefixId, `${prefix}${i}`, "available"]);
+      seatRows.push([
+        ticket_category_id,
+        seatPrefixId,
+        `${prefix}${i}`,
+        "available",
+      ]);
     }
 
     await seatModel.bulkCreateSeats(seatRows);
@@ -46,10 +53,12 @@ const generateSeats = async (req, res) => {
   }
 };
 
-// ADMIN: liat semua kursi di 1 kategori tiket (buat halaman kelola kursi)
+// ADMIN: lihat semua kursi dalam satu kategori tiket
 const getSeatsByTicketCategory = async (req, res) => {
   try {
-    const data = await seatModel.getSeatsByTicketCategory(req.params.ticket_category_id);
+    const data = await seatModel.getSeatsByTicketCategory(
+      req.params.ticket_category_id
+    );
 
     res.json({
       success: true,
@@ -63,7 +72,7 @@ const getSeatsByTicketCategory = async (req, res) => {
   }
 };
 
-// ADMIN: hapus 1 prefix/huruf beserta kursinya (cascade di DB)
+// ADMIN: hapus prefix beserta kursinya
 const deletePrefix = async (req, res) => {
   try {
     await seatModel.removePrefix(req.params.id);
@@ -80,17 +89,28 @@ const deletePrefix = async (req, res) => {
   }
 };
 
-// USER: liat denah kursi 1 concert (dikelompokin per kategori & prefix)
+// USER: ambil gambar denah, posisi prefix, dan data kursi satu concert
 const getSeatMapByConcert = async (req, res) => {
   try {
-    const rows = await seatModel.getSeatsByConcert(req.params.concert_id);
+    const { concert_id } = req.params;
+
+    const [seatMapResult, layout, rows] = await Promise.all([
+      seatModel.getConcertSeatMap(concert_id),
+      seatModel.getPrefixesWithPosition(concert_id),
+      seatModel.getSeatsByConcert(concert_id),
+    ]);
 
     const grouped = {};
+
     for (const row of rows) {
       grouped[row.category_name] = grouped[row.category_name] || {};
-      grouped[row.category_name][row.prefix] = grouped[row.category_name][row.prefix] || [];
+
+      grouped[row.category_name][row.prefix] =
+        grouped[row.category_name][row.prefix] || [];
+
       grouped[row.category_name][row.prefix].push({
         seat_id: row.seat_id,
+        seat_prefix_id: row.seat_prefix_id,
         code: row.code,
         status: row.status,
         price: row.price,
@@ -99,6 +119,8 @@ const getSeatMapByConcert = async (req, res) => {
 
     res.json({
       success: true,
+      seat_map: seatMapResult?.seat_map || null,
+      layout,
       data: grouped,
     });
   } catch (error) {
@@ -109,7 +131,7 @@ const getSeatMapByConcert = async (req, res) => {
   }
 };
 
-// USER: pilih kursi buat 1 order_item (jumlah seat_ids harus = quantity)
+// USER: pilih kursi untuk satu order_item
 const selectSeats = async (req, res) => {
   const conn = await db.getConnection();
 
@@ -133,6 +155,7 @@ const selectSeats = async (req, res) => {
 
     if (items.length === 0) {
       await conn.rollback();
+
       return res.status(404).json({
         success: false,
         message: "Order item tidak ditemukan",
@@ -141,6 +164,7 @@ const selectSeats = async (req, res) => {
 
     if (seat_ids.length !== items[0].quantity) {
       await conn.rollback();
+
       return res.status(400).json({
         success: false,
         message: `Jumlah kursi harus sesuai quantity (${items[0].quantity})`,
@@ -148,6 +172,7 @@ const selectSeats = async (req, res) => {
     }
 
     const placeholders = seat_ids.map(() => "?").join(",");
+
     const [seats] = await conn.query(
       `SELECT id, status FROM seats WHERE id IN (${placeholders}) FOR UPDATE`,
       seat_ids
@@ -155,6 +180,7 @@ const selectSeats = async (req, res) => {
 
     if (seats.length !== seat_ids.length) {
       await conn.rollback();
+
       return res.status(404).json({
         success: false,
         message: "Ada seat_id yang tidak valid",
@@ -162,8 +188,10 @@ const selectSeats = async (req, res) => {
     }
 
     const notAvailable = seats.filter((s) => s.status !== "available");
+
     if (notAvailable.length > 0) {
       await conn.rollback();
+
       return res.status(409).json({
         success: false,
         message: "Ada kursi yang sudah tidak tersedia",
@@ -177,6 +205,7 @@ const selectSeats = async (req, res) => {
     );
 
     const values = seat_ids.map((seatId) => [order_item_id, seatId]);
+
     await conn.query(
       "INSERT INTO order_item_seats (order_item_id, seat_id) VALUES ?",
       [values]
@@ -191,6 +220,7 @@ const selectSeats = async (req, res) => {
     });
   } catch (error) {
     await conn.rollback();
+
     res.status(500).json({
       success: false,
       message: error.message,
@@ -200,9 +230,7 @@ const selectSeats = async (req, res) => {
   }
 };
 
-// PUT /admin/seat-prefixes/:id
-// body: { prefix: "A", max_number: 20 }
-// -> rename huruf & nambah/ngurangin jumlah kursi
+// ADMIN: update prefix dan jumlah kursi
 const updatePrefix = async (req, res) => {
   const { id } = req.params;
   const { prefix, max_number } = req.body;
@@ -215,6 +243,7 @@ const updatePrefix = async (req, res) => {
   }
 
   const conn = await db.getConnection();
+
   try {
     await conn.beginTransaction();
 
@@ -222,10 +251,16 @@ const updatePrefix = async (req, res) => {
       "SELECT * FROM seat_prefixes WHERE id = ? FOR UPDATE",
       [id]
     );
+
     if (prefixRows.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: "Prefix tidak ditemukan" });
+
+      return res.status(404).json({
+        success: false,
+        message: "Prefix tidak ditemukan",
+      });
     }
+
     const oldPrefix = prefixRows[0];
     const newPrefix = prefix.toUpperCase();
     const newMax = Number(max_number);
@@ -237,17 +272,26 @@ const updatePrefix = async (req, res) => {
 
     if (newMax < existingSeats.length) {
       const seatsToRemove = existingSeats.slice(newMax);
-      const notAvailable = seatsToRemove.filter((s) => s.status !== "available");
+      const notAvailable = seatsToRemove.filter(
+        (s) => s.status !== "available"
+      );
+
       if (notAvailable.length > 0) {
         await conn.rollback();
+
         return res.status(409).json({
           success: false,
-          message: "Tidak bisa mengurangi kursi karena ada kursi yang sudah dipilih/booked",
+          message:
+            "Tidak bisa mengurangi kursi karena ada kursi yang sudah dipilih/booked",
         });
       }
+
       const idsToRemove = seatsToRemove.map((s) => s.id);
+
       await conn.query(
-        `DELETE FROM seats WHERE id IN (${idsToRemove.map(() => "?").join(",")})`,
+        `DELETE FROM seats WHERE id IN (${idsToRemove
+          .map(() => "?")
+          .join(",")})`,
         idsToRemove
       );
     }
@@ -266,9 +310,20 @@ const updatePrefix = async (req, res) => {
 
     if (newMax > existingSeats.length) {
       const newSeats = [];
-      for (let i = existingSeats.length + 1; i <= newMax; i++) {
-        newSeats.push([oldPrefix.ticket_category_id, id, `${newPrefix}${i}`, "available"]);
+
+      for (
+        let i = existingSeats.length + 1;
+        i <= newMax;
+        i++
+      ) {
+        newSeats.push([
+          oldPrefix.ticket_category_id,
+          id,
+          `${newPrefix}${i}`,
+          "available",
+        ]);
       }
+
       await conn.query(
         "INSERT INTO seats (ticket_category_id, seat_prefix_id, code, status) VALUES ?",
         [newSeats]
@@ -276,39 +331,68 @@ const updatePrefix = async (req, res) => {
     }
 
     await conn.commit();
-    res.json({ success: true, message: "Kursi berhasil diupdate" });
+
+    res.json({
+      success: true,
+      message: "Kursi berhasil diupdate",
+    });
   } catch (error) {
     await conn.rollback();
+
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         success: false,
         message: "Huruf tersebut sudah dipakai di kategori ini",
       });
     }
-    res.status(500).json({ success: false, message: error.message });
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   } finally {
     conn.release();
   }
 };
 
-// ADMIN: simpan posisi drag huruf kursi di atas gambar denah (dalam persen)
+// ADMIN: simpan posisi prefix di atas gambar denah
 const updatePrefixPosition = async (req, res) => {
   try {
     const { pos_x, pos_y } = req.body;
-    await seatModel.updatePrefixPosition(req.params.id, { pos_x, pos_y });
-    res.json({ success: true, message: "Posisi kursi berhasil disimpan" });
+
+    await seatModel.updatePrefixPosition(req.params.id, {
+      pos_x,
+      pos_y,
+    });
+
+    res.json({
+      success: true,
+      message: "Posisi kursi berhasil disimpan",
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ADMIN: ambil semua huruf kursi + posisinya buat digambar di atas denah
+// ADMIN: ambil semua prefix dan posisinya
 const getSeatMapLayout = async (req, res) => {
   try {
-    const data = await seatModel.getPrefixesWithPosition(req.params.concert_id);
-    res.json({ success: true, data });
+    const data = await seatModel.getPrefixesWithPosition(
+      req.params.concert_id
+    );
+
+    res.json({
+      success: true,
+      data,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "@/services/api";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
+import { Bricolage_Grotesque, Figtree } from "next/font/google";
 
 import {
   FaHome,
@@ -28,12 +29,25 @@ import {
   FaMicrophoneAlt,
   FaMapMarkerAlt,
   FaBell,
+  FaChartLine,
+  FaChartPie,
 } from "react-icons/fa";
 import ConcertLineupModal from "@/app/concert-line/page.jsx";
 import ConcertDetailModal from "./ConcertDetailModal";
 import LocationPickerModal from "./LocationPickerModal";
 import SeatMapEditor from "./SeatMapEditor";
 import SendNotificationModal from "./SendNotificationModal";
+
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+const body = Figtree({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const HD = "font-[family-name:var(--font-display)]";
 
 const EMPTY_FORM = {
   title: "",
@@ -47,6 +61,18 @@ const EMPTY_FORM = {
 
 const PAGE_SIZE = 3;
 
+// Tema SweetAlert supaya cocok dengan tampilan gelap
+const swalTheme = {
+  background: "#151D2E",
+  color: "#E8ECF4",
+  confirmButtonColor: "#F5B83D",
+  cancelButtonColor: "#2C3858",
+  customClass: { confirmButton: "!text-[#1A1305] !font-semibold" },
+};
+
+const notify = (title, text, icon) =>
+  Swal.fire({ ...swalTheme, title, text, icon });
+
 // Ambil base URL backend (tanpa akhiran /api) untuk membentuk URL gambar.
 const getImageUrl = (bannerPath) => {
   if (!bannerPath) return null;
@@ -55,28 +81,286 @@ const getImageUrl = (bannerPath) => {
 };
 
 const STATUS_STYLE = {
-  open: "bg-emerald-500/15 text-emerald-400",
-  closed: "bg-red-500/15 text-red-400",
-  draft: "bg-white/10 text-gray-400",
+  open: "bg-emerald-400/10 text-emerald-300",
+  closed: "bg-red-400/10 text-red-300",
+  draft: "bg-slate-400/10 text-slate-300",
 };
 
 const STATUS_LABEL = {
-  open: "AKTIF",
-  closed: "CLOSED",
-  draft: "DRAFT",
+  open: "Aktif",
+  closed: "Ditutup",
+  draft: "Draft",
 };
 
+// Warna tiap status di diagram bulat
+const STATUS_CHART = [
+  { key: "open", label: "Aktif", color: "#34D399" },
+  { key: "draft", label: "Draft", color: "#6B7690" },
+  { key: "closed", label: "Ditutup", color: "#F0675C" },
+];
+
 // Kolom tabel didefinisikan sekali supaya header & body selalu konsisten
-// lebar & paddingnya (dulu ini sumber utama layout yang berantakan).
 const TABLE_COLUMNS = [
-  { key: "concert", label: "Konser & Lokasi", className: "text-left w-[34%]" },
-  { key: "datetime", label: "Tanggal & Waktu", className: "text-left w-[18%]" },
+  { key: "concert", label: "Konser dan lokasi", className: "text-left w-[34%]" },
+  { key: "datetime", label: "Tanggal dan waktu", className: "text-left w-[18%]" },
   { key: "capacity", label: "Kapasitas", className: "text-left w-[20%]" },
   { key: "status", label: "Status", className: "text-left w-[14%]" },
   { key: "actions", label: "Aksi", className: "text-center w-[14%]" },
 ];
 
 const CELL_PADDING = "py-4 px-4 first:pl-6 last:pr-6";
+
+const MONTH_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+  "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+];
+
+const INPUT_CLASS =
+  "w-full rounded-lg border border-[#2C3858] bg-[#0F1626] px-3.5 py-2.5 text-sm text-[#E8ECF4] outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 [color-scheme:dark]";
+
+const LABEL_CLASS = "mb-1.5 block text-sm font-medium";
+
+const ACTION_BTN =
+  "flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-white/[0.08] hover:text-[#F5B83D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D]";
+
+/* ========================================= */
+/* DIAGRAM GARIS                             */
+/* ========================================= */
+
+function LineChart({ data }) {
+  const [hover, setHover] = useState(null);
+
+  const W = 640;
+  const H = 260;
+  const padL = 46;
+  const padR = 24;
+  const padT = 28;
+  const padB = 40;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const rawMax = Math.max(0, ...data.map((d) => d.value));
+  const niceMax = rawMax <= 4 ? 4 : Math.ceil(rawMax / 4) * 4;
+  const ticks = [0, 1, 2, 3, 4].map((i) => (niceMax * i) / 4);
+
+  const x = (i) =>
+    data.length === 1 ? padL + innerW / 2 : padL + (innerW * i) / (data.length - 1);
+  const y = (v) => padT + innerH - (v / niceMax) * innerH;
+
+  const points = data.map((d, i) => ({ x: x(i), y: y(d.value) }));
+
+  // garis melengkung halus
+  let linePath = "";
+  points.forEach((p, i) => {
+    if (i === 0) {
+      linePath += `M ${p.x} ${p.y}`;
+    } else {
+      const prev = points[i - 1];
+      const midX = (prev.x + p.x) / 2;
+      linePath += ` C ${midX} ${prev.y}, ${midX} ${p.y}, ${p.x} ${p.y}`;
+    }
+  });
+
+  const baseY = padT + innerH;
+  const areaPath =
+    points.length > 1
+      ? `${linePath} L ${points[points.length - 1].x} ${baseY} L ${points[0].x} ${baseY} Z`
+      : "";
+
+  const hovered = hover !== null ? data[hover] : null;
+  const hoveredPoint = hover !== null ? points[hover] : null;
+
+  const tipW = 140;
+  const tipH = 44;
+  const tipX = hoveredPoint
+    ? Math.min(Math.max(hoveredPoint.x - tipW / 2, padL), W - padR - tipW)
+    : 0;
+  const tipY = hoveredPoint ? Math.max(hoveredPoint.y - tipH - 14, 4) : 0;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none">
+      {/* grid horizontal + label sumbu Y */}
+      {ticks.map((t) => (
+        <g key={t}>
+          <line
+            x1={padL}
+            x2={W - padR}
+            y1={y(t)}
+            y2={y(t)}
+            stroke="rgba(255,255,255,0.06)"
+            strokeDasharray="4 4"
+          />
+          <text
+            x={padL - 10}
+            y={y(t) + 4}
+            textAnchor="end"
+            fontSize="11"
+            fill="#5E6A87"
+          >
+            {Math.round(t).toLocaleString("id-ID")}
+          </text>
+        </g>
+      ))}
+
+      {/* area di bawah garis */}
+      {areaPath && <path d={areaPath} fill="#F5B83D" fillOpacity="0.08" />}
+
+      {/* garis */}
+      {points.length > 1 && (
+        <path
+          d={linePath}
+          fill="none"
+          stroke="#F5B83D"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+      )}
+
+      {/* garis vertikal saat hover */}
+      {hoveredPoint && (
+        <line
+          x1={hoveredPoint.x}
+          x2={hoveredPoint.x}
+          y1={padT}
+          y2={baseY}
+          stroke="rgba(245,184,61,0.35)"
+          strokeDasharray="4 4"
+        />
+      )}
+
+      {/* titik + label sumbu X */}
+      {data.map((d, i) => (
+        <g key={d.label + i}>
+          <circle
+            cx={points[i].x}
+            cy={points[i].y}
+            r={hover === i ? 6.5 : 4.5}
+            fill="#151D2E"
+            stroke="#F5B83D"
+            strokeWidth="2.5"
+          />
+          <text
+            x={points[i].x}
+            y={H - 14}
+            textAnchor="middle"
+            fontSize="11"
+            fill={hover === i ? "#E8ECF4" : "#5E6A87"}
+          >
+            {d.label}
+          </text>
+        </g>
+      ))}
+
+      {/* area hover tak terlihat */}
+      {data.map((d, i) => {
+        const slot = data.length === 1 ? innerW : innerW / (data.length - 1);
+        return (
+          <rect
+            key={`hit-${i}`}
+            x={points[i].x - slot / 2}
+            y={padT}
+            width={slot}
+            height={innerH}
+            fill="transparent"
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+          />
+        );
+      })}
+
+      {/* tooltip */}
+      {hovered && hoveredPoint && (
+        <g pointerEvents="none">
+          <rect
+            x={tipX}
+            y={tipY}
+            width={tipW}
+            height={tipH}
+            rx="8"
+            fill="#1B2539"
+            stroke="#2C3858"
+          />
+          <text x={tipX + 12} y={tipY + 18} fontSize="11" fill="#8B96AD">
+            {hovered.fullLabel}
+          </text>
+          <text
+            x={tipX + 12}
+            y={tipY + 35}
+            fontSize="13"
+            fontWeight="700"
+            fill="#E8ECF4"
+          >
+            {hovered.value.toLocaleString("id-ID")} tiket, {hovered.count} konser
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+/* ========================================= */
+/* DIAGRAM BULAT (DONUT)                     */
+/* ========================================= */
+
+function DonutChart({ segments, total }) {
+  const [hover, setHover] = useState(null);
+
+  // lingkaran dengan keliling 100 supaya dasharray = persen
+  const r = 15.9155;
+  let offset = 0;
+
+  const active = hover !== null ? segments[hover] : null;
+
+  return (
+    <div className="relative mx-auto h-44 w-44">
+      <svg viewBox="0 0 42 42" className="h-full w-full -rotate-90">
+        <circle
+          cx="21"
+          cy="21"
+          r={r}
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth="5"
+        />
+
+        {segments.map((seg, i) => {
+          if (seg.value === 0) return null;
+          const pct = (seg.value / total) * 100;
+          const gap = segments.filter((s) => s.value > 0).length > 1 ? 1 : 0;
+          const dash = Math.max(pct - gap, 0);
+          const el = (
+            <circle
+              key={seg.key}
+              cx="21"
+              cy="21"
+              r={r}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={hover === i ? 6 : 5}
+              strokeDasharray={`${dash} ${100 - dash}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="butt"
+              style={{ transition: "stroke-width 0.15s", cursor: "pointer" }}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            />
+          );
+          offset += pct;
+          return el;
+        })}
+      </svg>
+
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`${HD} text-3xl font-bold leading-none`}>
+          {active ? active.value : total}
+        </span>
+        <span className="mt-1 text-xs text-[#8B96AD]">
+          {active ? active.label : "Total konser"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function ConcertPage() {
   const router = useRouter();
@@ -144,7 +428,7 @@ export default function ConcertPage() {
 
       setConcerts(res.data.data || []);
     } catch (err) {
-      Swal.fire("Error", "Gagal mengambil data concert", "error");
+      notify("Error", "Gagal mengambil data concert", "error");
     } finally {
       setLoading(false);
     }
@@ -179,6 +463,52 @@ export default function ConcertPage() {
     return result;
   }, [concerts, search, statusFilter, sortBy]);
 
+  // Data diagram garis: tiket terjual per bulan (berdasarkan tanggal konser)
+  const lineData = useMemo(() => {
+    const map = {};
+
+    concerts.forEach((item) => {
+      if (!item.concert_date) return;
+      const ym = String(item.concert_date).slice(0, 7); // "YYYY-MM"
+      if (!/^\d{4}-\d{2}$/.test(ym)) return;
+
+      if (!map[ym]) map[ym] = { value: 0, count: 0 };
+      map[ym].value += Number(item.tickets_sold || 0);
+      map[ym].count += 1;
+    });
+
+    return Object.keys(map)
+      .sort()
+      .slice(-6) // maksimal 6 bulan terakhir yang ada datanya
+      .map((ym) => {
+        const [yy, mm] = ym.split("-");
+        const monthName = MONTH_SHORT[Number(mm) - 1];
+        return {
+          label: `${monthName} ${yy.slice(2)}`,
+          fullLabel: `${monthName} ${yy}`,
+          value: map[ym].value,
+          count: map[ym].count,
+        };
+      });
+  }, [concerts]);
+
+  const totalSold = useMemo(
+    () => concerts.reduce((sum, item) => sum + Number(item.tickets_sold || 0), 0),
+    [concerts]
+  );
+
+  // Data diagram bulat: komposisi status konser
+  const donutSegments = useMemo(
+    () =>
+      STATUS_CHART.map((s) => ({
+        ...s,
+        value: concerts.filter((c) => c.status === s.key).length,
+      })),
+    [concerts]
+  );
+
+  const donutTotal = donutSegments.reduce((sum, s) => sum + s.value, 0);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -193,12 +523,12 @@ export default function ConcertPage() {
 
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
     if (!allowedTypes.includes(file.type)) {
-      Swal.fire("Format salah", "Poster harus JPG, PNG, atau WEBP", "warning");
+      notify("Format salah", "Poster harus JPG, PNG, atau WEBP", "warning");
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      Swal.fire("Terlalu besar", "Ukuran poster maksimal 2MB", "warning");
+      notify("Terlalu besar", "Ukuran poster maksimal 2MB", "warning");
       return;
     }
 
@@ -241,7 +571,7 @@ export default function ConcertPage() {
 
   const validateForm = () => {
     if (!form.title.trim() || !form.venue.trim() || !form.date || !form.time) {
-      Swal.fire("Data belum lengkap", "Title, venue, date, dan jam wajib diisi", "warning");
+      notify("Data belum lengkap", "Judul, venue, tanggal, dan jam wajib diisi", "warning");
       return false;
     }
     return true;
@@ -271,16 +601,16 @@ export default function ConcertPage() {
 
       if (editId) {
         await api.put(`/concerts/${editId}`, formData, { headers });
-        Swal.fire("Success", "Concert berhasil diupdate", "success");
+        notify("Berhasil", "Concert berhasil diupdate", "success");
       } else {
         await api.post("/concerts", formData, { headers });
-        Swal.fire("Success", "Concert berhasil ditambahkan", "success");
+        notify("Berhasil", "Concert berhasil ditambahkan", "success");
       }
 
       closeModal();
       await getConcerts();
     } catch (err) {
-      Swal.fire("Error", err.response?.data?.message || "Gagal menyimpan", "error");
+      notify("Error", err.response?.data?.message || "Gagal menyimpan", "error");
     } finally {
       setSaving(false);
     }
@@ -288,16 +618,15 @@ export default function ConcertPage() {
 
   const deleteConcert = async (id) => {
     const result = await Swal.fire({
+      ...swalTheme,
       title: "Hapus concert?",
       text: "Data yang dihapus tidak bisa dikembalikan.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Ya",
+      confirmButtonText: "Ya, hapus",
       cancelButtonText: "Batal",
-      background: "#141420",
-      color: "#e5e7eb",
-      confirmButtonColor: "#7c3aed",
-      cancelButtonColor: "#374151",
+      confirmButtonColor: "#DC2626",
+      customClass: {},
     });
 
     if (!result.isConfirmed) return;
@@ -310,20 +639,24 @@ export default function ConcertPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      Swal.fire("Berhasil", "Concert berhasil dihapus", "success");
+      notify("Berhasil", "Concert berhasil dihapus", "success");
       await getConcerts();
     } catch (err) {
-      Swal.fire("Error", err.response?.data?.message || "Gagal menghapus", "error");
+      notify("Error", err.response?.data?.message || "Gagal menghapus", "error");
     } finally {
       setDeletingId(null);
     }
   };
 
+  const rootClass = `${display.variable} ${body.variable} font-[family-name:var(--font-body)]`;
+
   if (loading) {
     return (
-      <div className="h-screen flex flex-col justify-center items-center gap-4 bg-[#0b0b13] text-white">
-        <div className="w-10 h-10 border-[3px] border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-        <p className="text-sm text-gray-500 tracking-wide">Memuat jadwal konser...</p>
+      <div
+        className={`${rootClass} flex h-screen flex-col items-center justify-center gap-4 bg-[#0C1220] text-[#E8ECF4]`}
+      >
+        <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-[#F5B83D]/25 border-t-[#F5B83D] motion-reduce:animate-none" />
+        <p className="text-sm text-[#8B96AD]">Memuat jadwal konser...</p>
       </div>
     );
   }
@@ -338,22 +671,22 @@ export default function ConcertPage() {
     { href: "/manage-admin", icon: FaUserShield, label: "Manage Admin" },
   ];
 
-  return (
-    <div className="flex min-h-screen bg-[#0b0b13] text-white">
-      {/* SIDEBAR */}
-      <aside className="flex flex-col w-72 shrink-0 bg-[#101018] border-r border-white/5 relative">
-        <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-violet-600/10 blur-3xl" />
+  const hasFilter = search || statusFilter !== "all";
 
-        <div className="p-8 border-b border-white/5 relative">
-          <h1 className="text-2xl font-bold flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-600/30 rotate-3">
-              <FaTicketAlt size={15} className="text-white" />
-            </span>
-            Concert<span className="text-violet-400">X</span>
-          </h1>
+  return (
+    <div
+      className={`${rootClass} flex min-h-screen bg-[#0C1220] text-[#E8ECF4] selection:bg-[#F5B83D] selection:text-[#1A1305]`}
+    >
+      {/* ================= SIDEBAR ================= */}
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/[0.06] bg-[#101727]">
+        <div className="flex items-center gap-2.5 px-7 py-7">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F5B83D] text-[#1A1305]">
+            <FaTicketAlt size={15} />
+          </span>
+          <span className={`${HD} text-xl font-bold tracking-tight`}>Lokatix</span>
         </div>
 
-        <nav className="flex-1 p-5 space-y-1 relative">
+        <nav className="flex-1 space-y-0.5 px-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/concert";
@@ -361,111 +694,194 @@ export default function ConcertPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative w-full rounded-xl py-3 flex items-center gap-4 px-5 text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D] ${
                   active
-                    ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-600/25"
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
+                    ? "bg-white/[0.07] text-white"
+                    : "text-[#8B96AD] hover:bg-white/[0.04] hover:text-white"
                 }`}
               >
                 {active && (
-                  <span className="absolute -left-5 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-white" />
+                  <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#F5B83D]" />
                 )}
-                <Icon size={15} className="shrink-0" />
+                <Icon size={14} className={`shrink-0 ${active ? "text-[#F5B83D]" : ""}`} />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-5 relative">
-          <div className="border-t border-dashed border-white/10 mb-5" />
+        <div className="p-4">
           <button
             onClick={logout}
-            className="bg-red-600/90 hover:bg-red-600 w-full py-3 rounded-xl flex justify-center items-center gap-3 text-sm font-semibold transition-colors shadow-lg shadow-red-600/10"
+            className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-red-400/25 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
-            <FaSignOutAlt size={13} />
+            <FaSignOutAlt size={12} />
             Keluar
           </button>
         </div>
       </aside>
 
-      {/* CONTENT */}
-      <main className="flex-1 min-w-0">
-        <div className="px-10 py-7 flex flex-wrap justify-between items-center gap-4 border-b border-white/5 bg-[#0b0b13]/80 backdrop-blur sticky top-0 z-30">
+      {/* ================= CONTENT ================= */}
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0C1220]/85 px-10 py-6 backdrop-blur">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Jadwal Konser</h1>
-            <p className="text-gray-500 mt-1 text-sm">
+            <h1 className={`${HD} text-3xl font-bold tracking-tight`}>Jadwal konser</h1>
+            <p className="mt-1 text-sm text-[#8B96AD]">
               Kelola semua jadwal konser dan ketersediaan panggung.
             </p>
           </div>
 
           <button
             onClick={openAddModal}
-            className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-semibold transition-all shadow-lg shadow-violet-600/20 active:scale-[0.98] shrink-0"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-[#F5B83D] px-5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30"
           >
-            <FaPlus size={12} />
-            Tambah Konser
+            <FaPlus size={11} />
+            Tambah konser
           </button>
-        </div>
+        </header>
 
-        <div className="p-10 space-y-6">
-          {/* SEARCH & FILTER BAR */}
-          <div className="bg-[#141420] rounded-2xl border border-white/5 p-5 flex flex-col md:flex-row md:items-center gap-4">
-            <div className="relative flex-1 min-w-[240px]">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm" />
+        <div className="space-y-6 p-10">
+          {/* ===== DIAGRAM ===== */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            {/* Diagram garis */}
+            <section className="rounded-2xl bg-[#151D2E] p-7 ring-1 ring-white/[0.06] xl:col-span-2">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className={`${HD} text-xl font-bold tracking-tight`}>
+                    Tiket terjual per bulan
+                  </h2>
+                  <p className="mt-1 text-sm text-[#8B96AD]">
+                    Berdasarkan tanggal konser
+                  </p>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <p className={`${HD} text-3xl font-bold leading-none text-[#F5B83D]`}>
+                    {totalSold.toLocaleString("id-ID")}
+                  </p>
+                  <p className="mt-1 text-xs text-[#8B96AD]">Total tiket terjual</p>
+                </div>
+              </div>
+
+              {lineData.length === 0 ? (
+                <div className="flex h-[220px] flex-col items-center justify-center gap-1 text-center">
+                  <FaChartLine className="mb-2 text-[#5E6A87]" size={22} />
+                  <p className="text-sm font-semibold">Belum ada data</p>
+                  <p className="text-xs text-[#8B96AD]">
+                    Grafik muncul setelah ada konser dengan tanggal.
+                  </p>
+                </div>
+              ) : (
+                <LineChart data={lineData} />
+              )}
+            </section>
+
+            {/* Diagram bulat */}
+            <section className="rounded-2xl bg-[#151D2E] p-7 ring-1 ring-white/[0.06]">
+              <div className="mb-5">
+                <h2 className={`${HD} text-xl font-bold tracking-tight`}>Status konser</h2>
+                <p className="mt-1 text-sm text-[#8B96AD]">Komposisi semua konser</p>
+              </div>
+
+              {donutTotal === 0 ? (
+                <div className="flex h-[220px] flex-col items-center justify-center gap-1 text-center">
+                  <FaChartPie className="mb-2 text-[#5E6A87]" size={22} />
+                  <p className="text-sm font-semibold">Belum ada data</p>
+                </div>
+              ) : (
+                <>
+                  <DonutChart segments={donutSegments} total={donutTotal} />
+
+                  <div className="mt-6 space-y-2.5">
+                    {donutSegments.map((seg) => {
+                      const pct = Math.round((seg.value / donutTotal) * 100);
+                      return (
+                        <div
+                          key={seg.key}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: seg.color }}
+                            />
+                            <span className="text-[#C9D1E3]">{seg.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{seg.value}</span>
+                            <span className="w-9 text-right text-xs text-[#8B96AD]">
+                              {pct}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+
+          {/* ===== SEARCH & FILTER ===== */}
+          <section className="flex flex-col gap-4 rounded-2xl bg-[#151D2E] p-5 ring-1 ring-white/[0.06] md:flex-row md:items-center">
+            <div className="relative min-w-[240px] flex-1">
+              <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
               <input
                 type="text"
-                placeholder="Cari nama konser atau lokasi..."
+                placeholder="Cari nama konser atau lokasi"
+                aria-label="Cari nama konser atau lokasi"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 w-full text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 placeholder:text-gray-500 transition"
+                className="h-11 w-full rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-4 text-sm outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15"
               />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
               <div className="relative">
-                <FaFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none" />
+                <FaFilter className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="appearance-none bg-white/5 border border-white/10 rounded-xl pl-10 pr-8 py-3 text-sm w-full sm:w-44 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 text-gray-300 transition"
+                  aria-label="Filter status"
+                  className="h-11 w-full appearance-none rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-8 text-sm text-[#C9D1E3] outline-none transition focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 [color-scheme:dark] sm:w-44"
                 >
-                  <option value="all">Semua Status</option>
+                  <option value="all">Semua status</option>
                   <option value="open">Aktif</option>
                   <option value="draft">Draft</option>
-                  <option value="closed">Closed</option>
+                  <option value="closed">Ditutup</option>
                 </select>
               </div>
 
               <div className="relative">
-                <FaSortAmountDown className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none" />
+                <FaSortAmountDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white/5 border border-white/10 rounded-xl pl-10 pr-8 py-3 text-sm w-full sm:w-44 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 text-gray-300 transition"
+                  aria-label="Urutkan"
+                  className="h-11 w-full appearance-none rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-8 text-sm text-[#C9D1E3] outline-none transition focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 [color-scheme:dark] sm:w-48"
                 >
                   <option value="newest">Terbaru</option>
                   <option value="oldest">Terlama</option>
-                  <option value="date_asc">Tanggal Terdekat</option>
-                  <option value="date_desc">Tanggal Terjauh</option>
+                  <option value="date_asc">Tanggal terdekat</option>
+                  <option value="date_desc">Tanggal terjauh</option>
                 </select>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* TABLE */}
-          <div className="bg-[#141420] rounded-2xl border border-white/5 overflow-hidden">
+          {/* ===== TABEL ===== */}
+          <section className="overflow-hidden rounded-2xl bg-[#151D2E] ring-1 ring-white/[0.06]">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse table-fixed min-w-[900px]">
+              <table className="w-full min-w-[900px] table-fixed border-collapse text-sm">
                 <colgroup>
                   {TABLE_COLUMNS.map((col) => (
                     <col key={col.key} className={col.className.match(/w-\[[^\]]+\]/)?.[0]} />
                   ))}
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-white/5 text-gray-500 text-xs uppercase tracking-wide">
+                  <tr className="border-b border-white/[0.06] text-xs text-[#5E6A87]">
                     {TABLE_COLUMNS.map((col) => (
-                      <th key={col.key} className={`${CELL_PADDING} ${col.className} font-semibold`}>
+                      <th key={col.key} className={`${CELL_PADDING} ${col.className} font-medium`}>
                         {col.label}
                       </th>
                     ))}
@@ -477,18 +893,16 @@ export default function ConcertPage() {
                     <tr>
                       <td colSpan={TABLE_COLUMNS.length} className="py-16">
                         <div className="flex flex-col items-center text-center">
-                          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-                            <FaMusic className="text-gray-600" />
-                          </div>
-                          <p className="text-sm font-semibold text-gray-300">
-                            {search || statusFilter !== "all"
+                          <FaMusic className="mb-3 text-[#5E6A87]" size={22} />
+                          <p className="text-sm font-semibold">
+                            {hasFilter
                               ? "Tidak ada konser yang cocok"
                               : "Belum ada data konser"}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {search || statusFilter !== "all"
+                          <p className="mt-1 text-xs text-[#8B96AD]">
+                            {hasFilter
                               ? "Coba ubah kata kunci atau filter status."
-                              : "Klik \"Tambah Konser\" untuk mulai menjadwalkan event."}
+                              : "Klik \"Tambah konser\" untuk mulai menjadwalkan event."}
                           </p>
                         </div>
                       </td>
@@ -505,26 +919,29 @@ export default function ConcertPage() {
                         quota && quota > 0 ? Math.round((sold / quota) * 100) : null;
 
                       return (
-                        <tr key={item.id} className="border-b border-white/5 hover:bg-white/[0.04] transition-colors align-middle">
+                        <tr
+                          key={item.id}
+                          className="border-b border-white/[0.06] align-middle transition-colors last:border-0 hover:bg-white/[0.03]"
+                        >
                           <td className={CELL_PADDING}>
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-violet-600 to-fuchsia-600 shrink-0 flex items-center justify-center">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#1B2539]">
                                 {imageUrl ? (
                                   <img
                                     src={imageUrl}
                                     alt={item.title}
-                                    className="w-full h-full object-cover"
+                                    className="h-full w-full object-cover"
                                     onError={(e) => {
                                       e.target.style.display = "none";
                                     }}
                                   />
                                 ) : (
-                                  <FaImage className="text-white/70" />
+                                  <FaImage className="text-[#5E6A87]" />
                                 )}
                               </div>
                               <div className="min-w-0">
-                                <p className="font-semibold truncate">{item.title}</p>
-                                <p className="text-gray-500 text-xs truncate">
+                                <p className="truncate font-semibold">{item.title}</p>
+                                <p className="truncate text-xs text-[#8B96AD]">
                                   {item.location}
                                 </p>
                               </div>
@@ -541,7 +958,7 @@ export default function ConcertPage() {
                                   })
                                 : "-"}
                             </p>
-                            <p className="text-gray-500 text-xs whitespace-nowrap mt-0.5">
+                            <p className="mt-0.5 whitespace-nowrap text-xs text-[#8B96AD]">
                               {item.concert_time ? `${item.concert_time.slice(0, 5)} WIB` : ""}
                             </p>
                           </td>
@@ -550,32 +967,34 @@ export default function ConcertPage() {
                             {percentage !== null ? (
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <div className="w-24 h-1.5 rounded-full bg-white/10 overflow-hidden shrink-0">
+                                  <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-white/10">
                                     <div
                                       className={`h-full rounded-full ${
                                         percentage >= 80
-                                          ? "bg-emerald-500"
+                                          ? "bg-emerald-400"
                                           : percentage >= 40
-                                          ? "bg-amber-500"
-                                          : "bg-gray-500"
+                                          ? "bg-[#F5B83D]"
+                                          : "bg-slate-500"
                                       }`}
                                       style={{ width: `${Math.min(percentage, 100)}%` }}
                                     />
                                   </div>
-                                  <span className="text-xs text-gray-400 shrink-0">{percentage}%</span>
+                                  <span className="shrink-0 text-xs text-[#C9D1E3]">
+                                    {percentage}%
+                                  </span>
                                 </div>
-                                <p className="text-gray-600 text-xs mt-1 whitespace-nowrap">
+                                <p className="mt-1 whitespace-nowrap text-xs text-[#5E6A87]">
                                   {sold.toLocaleString("id-ID")} / {quota.toLocaleString("id-ID")}
                                 </p>
                               </div>
                             ) : (
-                              <span className="text-gray-600 text-xs">-</span>
+                              <span className="text-xs text-[#5E6A87]">-</span>
                             )}
                           </td>
 
                           <td className={CELL_PADDING}>
                             <span
-                              className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                              className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${
                                 STATUS_STYLE[item.status] || STATUS_STYLE.draft
                               }`}
                             >
@@ -584,43 +1003,48 @@ export default function ConcertPage() {
                           </td>
 
                           <td className={CELL_PADDING}>
-                            <div className="flex justify-center gap-2">
+                            <div className="flex justify-center gap-1">
                               <button
                                 onClick={() => setDetailConcert(item)}
-                                title="Lihat Detail & Kelola Tiket"
-                                className="w-9 h-9 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 flex items-center justify-center text-emerald-400 transition"
+                                title="Lihat detail dan kelola tiket"
+                                aria-label="Lihat detail dan kelola tiket"
+                                className={ACTION_BTN}
                               >
                                 <FaTicketAlt size={14} />
                               </button>
 
                               <button
                                 onClick={() => setSeatMapConcert(item)}
-                                title="Setup Denah Kursi"
-                                className="w-9 h-9 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 flex items-center justify-center text-sky-400 transition"
+                                title="Setup denah kursi"
+                                aria-label="Setup denah kursi"
+                                className={ACTION_BTN}
                               >
                                 <FaMapMarkerAlt size={14} />
                               </button>
 
                               <button
                                 onClick={() => setLineupConcert(item)}
-                                title="Kelola Lineup Artist"
-                                className="w-9 h-9 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 flex items-center justify-center text-violet-400 transition"
+                                title="Kelola lineup artis"
+                                aria-label="Kelola lineup artis"
+                                className={ACTION_BTN}
                               >
                                 <FaMicrophoneAlt size={14} />
                               </button>
 
                               <button
                                 onClick={() => setNotifConcert(item)}
-                                title="Kirim Notifikasi"
-                                className="w-9 h-9 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 flex items-center justify-center text-amber-400 transition"
+                                title="Kirim notifikasi"
+                                aria-label="Kirim notifikasi"
+                                className={ACTION_BTN}
                               >
                                 <FaBell size={14} />
                               </button>
 
                               <button
                                 onClick={() => openEditModal(item)}
-                                title="Edit Concert"
-                                className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-300 transition"
+                                title="Edit konser"
+                                aria-label="Edit konser"
+                                className={ACTION_BTN}
                               >
                                 <FaEdit size={14} />
                               </button>
@@ -628,8 +1052,9 @@ export default function ConcertPage() {
                               <button
                                 onClick={() => deleteConcert(item.id)}
                                 disabled={deletingId === item.id}
-                                title="Hapus Concert"
-                                className="w-9 h-9 rounded-lg bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 flex items-center justify-center text-red-400 transition"
+                                title="Hapus konser"
+                                aria-label="Hapus konser"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-red-400/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
                               >
                                 <FaTrash size={14} />
                               </button>
@@ -644,19 +1069,20 @@ export default function ConcertPage() {
             </div>
 
             {/* PAGINATION */}
-            <div className="flex flex-wrap justify-between items-center gap-3 px-6 py-4 border-t border-white/5 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] px-6 py-4 text-sm text-[#8B96AD]">
               <p>
                 Menampilkan {paginated.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} -{" "}
                 {Math.min(page * PAGE_SIZE, filtered.length)} dari {filtered.length} konser
               </p>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition"
+                  aria-label="Halaman sebelumnya"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] transition hover:bg-white/[0.1] disabled:opacity-30"
                 >
-                  <FaChevronLeft size={12} />
+                  <FaChevronLeft size={11} />
                 </button>
 
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -665,54 +1091,59 @@ export default function ConcertPage() {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
+                      className={`h-8 w-8 rounded-lg text-xs font-semibold transition-colors ${
                         p === page
-                          ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-600/25"
-                          : "bg-white/5 hover:bg-white/10 text-gray-400"
+                          ? "bg-[#F5B83D] text-[#1A1305]"
+                          : "bg-white/[0.05] text-[#C9D1E3] hover:bg-white/[0.1]"
                       }`}
                     >
                       {p}
                     </button>
                   ))}
 
-                {totalPages > 5 && <span className="text-gray-600 px-1">...</span>}
+                {totalPages > 5 && <span className="px-1 text-[#5E6A87]">...</span>}
 
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition"
+                  aria-label="Halaman berikutnya"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] transition hover:bg-white/[0.1] disabled:opacity-30"
                 >
-                  <FaChevronRight size={12} />
+                  <FaChevronRight size={11} />
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* MODAL: Add / Edit Concert */}
+        {/* MODAL: Tambah / Edit Concert */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-[#141420] border border-white/10 w-full max-w-[550px] rounded-2xl p-8 max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/60">
-              <h1 className="text-2xl font-bold mb-6">
-                {editId ? "Edit Concert" : "Tambah Concert"}
-              </h1>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="max-h-[90vh] w-full max-w-[550px] overflow-y-auto rounded-2xl border border-[#2C3858] bg-[#151D2E] p-8 shadow-2xl shadow-black/60">
+              <h2 className={`${HD} mb-6 text-2xl font-bold tracking-tight`}>
+                {editId ? "Edit konser" : "Tambah konser"}
+              </h2>
 
               <div className="space-y-5">
                 <div className="flex flex-col items-center gap-3">
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-32 h-32 rounded-xl border-2 border-dashed border-white/15 flex items-center justify-center overflow-hidden cursor-pointer hover:border-violet-500 transition relative group bg-white/5"
+                    className="group relative flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-[#34415F] bg-[#0F1626] transition hover:border-[#F5B83D]"
                   >
                     {photoPreview ? (
                       <img
                         src={photoPreview}
                         alt="Preview"
-                        className="w-full h-full object-cover"
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <FaImage size={40} className="text-gray-600" />
+                      <FaImage size={36} className="text-[#34415F]" />
                     )}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover:opacity-100">
                       <FaCamera className="text-white" size={20} />
                     </div>
                   </div>
@@ -728,45 +1159,48 @@ export default function ConcertPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-sm text-violet-400 font-semibold hover:text-violet-300 transition"
+                    className="text-sm font-semibold text-[#F5B83D] transition hover:text-[#FFC857]"
                   >
                     {photoPreview ? "Ganti poster" : "Upload poster"}
                   </button>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1.5 font-medium">
-                    Judul Konser
+                  <label htmlFor="title" className={LABEL_CLASS}>
+                    Judul konser
                   </label>
                   <input
+                    id="title"
                     type="text"
                     name="title"
-                    placeholder="Concert Title"
+                    placeholder="Nama konser"
                     value={form.title}
                     onChange={handleChange}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 placeholder:text-gray-500 transition"
+                    className={INPUT_CLASS}
                   />
                 </div>
 
                 {/* Venue + tombol pilih lokasi lewat peta */}
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+                  <label htmlFor="venue" className={LABEL_CLASS}>
                     Venue
                   </label>
                   <div className="flex gap-2">
                     <input
+                      id="venue"
                       type="text"
                       name="venue"
-                      placeholder="Venue (atau pilih lewat peta)"
+                      placeholder="Ketik venue atau pilih lewat peta"
                       value={form.venue}
                       onChange={handleChange}
-                      className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 placeholder:text-gray-500 transition"
+                      className={`${INPUT_CLASS} min-w-0 flex-1`}
                     />
                     <button
                       type="button"
                       onClick={() => setShowLocationPicker(true)}
                       title="Pilih lokasi di peta"
-                      className="px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center justify-center text-sm text-violet-400 shrink-0 transition"
+                      aria-label="Pilih lokasi di peta"
+                      className="flex shrink-0 items-center justify-center rounded-lg border border-[#2C3858] bg-[#0F1626] px-4 text-[#F5B83D] transition hover:border-[#F5B83D]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/15"
                     >
                       <FaMapMarkerAlt size={14} />
                     </button>
@@ -775,57 +1209,61 @@ export default function ConcertPage() {
 
                 {/* Deskripsi Konser */}
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+                  <label htmlFor="description" className={LABEL_CLASS}>
                     Deskripsi
                   </label>
                   <textarea
+                    id="description"
                     name="description"
-                    placeholder="Deskripsi konser..."
+                    placeholder="Ceritakan singkat tentang konser ini"
                     value={form.description}
                     onChange={handleChange}
                     rows={4}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 placeholder:text-gray-500 resize-none transition"
+                    className={`${INPUT_CLASS} resize-none`}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+                    <label htmlFor="date" className={LABEL_CLASS}>
                       Tanggal
                     </label>
                     <input
+                      id="date"
                       type="date"
                       name="date"
                       value={form.date}
                       onChange={handleChange}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 [color-scheme:dark] transition"
+                      className={INPUT_CLASS}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+                    <label htmlFor="time" className={LABEL_CLASS}>
                       Jam
                     </label>
                     <input
+                      id="time"
                       type="time"
                       name="time"
                       value={form.time}
                       onChange={handleChange}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 [color-scheme:dark] transition"
+                      className={INPUT_CLASS}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5 font-medium">
-                      Tipe Konser
+                    <label htmlFor="concert_type" className={LABEL_CLASS}>
+                      Tipe konser
                     </label>
                     <select
+                      id="concert_type"
                       name="concert_type"
                       value={form.concert_type}
                       onChange={handleChange}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 transition"
+                      className={INPUT_CLASS}
                     >
                       <option value="single">Single</option>
                       <option value="festival">Festival</option>
@@ -833,41 +1271,42 @@ export default function ConcertPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1.5 font-medium">
+                    <label htmlFor="status" className={LABEL_CLASS}>
                       Status
                     </label>
                     <select
+                      id="status"
                       name="status"
                       value={form.status}
                       onChange={handleChange}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 transition"
+                      className={INPUT_CLASS}
                     >
                       <option value="draft">Draft</option>
-                      <option value="open">Open</option>
-                      <option value="closed">Closed</option>
+                      <option value="open">Aktif</option>
+                      <option value="closed">Ditutup</option>
                     </select>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 mt-8">
+              <div className="mt-8 flex justify-end gap-3">
                 <button
                   onClick={closeModal}
                   disabled={saving}
-                  className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl transition disabled:opacity-50 text-sm"
+                  className="rounded-lg border border-[#2C3858] px-5 py-2.5 text-sm font-medium text-[#C9D1E3] transition hover:bg-white/[0.05] disabled:opacity-50"
                 >
-                  Cancel
+                  Batal
                 </button>
 
                 <button
                   onClick={saveConcert}
                   disabled={saving}
-                  className="px-5 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 rounded-xl transition-all disabled:opacity-50 text-sm font-semibold shadow-lg shadow-violet-600/20 flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-lg bg-[#F5B83D] px-5 py-2.5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30 disabled:opacity-60"
                 >
                   {saving && (
-                    <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#1A1305]/25 border-t-[#1A1305] motion-reduce:animate-none" />
                   )}
-                  {saving ? "Menyimpan..." : "Save"}
+                  {saving ? "Menyimpan..." : "Simpan"}
                 </button>
               </div>
             </div>

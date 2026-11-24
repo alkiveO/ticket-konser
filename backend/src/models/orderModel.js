@@ -1,3 +1,4 @@
+
 const db = require("../config/database");
 const adminNotificationModel = require("./adminNotificationModel");
 
@@ -19,7 +20,6 @@ const generateOrderCode = () => {
 
 // ============================
 // HELPER: update status seats berdasarkan order_id
-// (nyambung lewat order_items -> order_item_seats -> seats)
 // ============================
 const updateSeatsStatusByOrder = async (order_id, status) => {
   await db.query(
@@ -55,6 +55,7 @@ const getOrderNotifSummary = async (order_id) => {
     `,
     [order_id]
   );
+
   return rows[0] || null;
 };
 
@@ -67,6 +68,12 @@ const createOrder = async (user_id, items) => {
   let concertId = null;
 
   for (const item of items) {
+    const quantity = Number(item.quantity);
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error("Jumlah tiket tidak valid");
+    }
+
     const [ticket] = await db.query(
       `
       SELECT *
@@ -82,7 +89,7 @@ const createOrder = async (user_id, items) => {
 
     const ticketData = ticket[0];
 
-    if (ticketData.remaining_quota < item.quantity) {
+    if (Number(ticketData.remaining_quota) < quantity) {
       throw new Error(
         `Kuota tiket ${ticketData.name} tidak mencukupi`
       );
@@ -90,20 +97,20 @@ const createOrder = async (user_id, items) => {
 
     concertId = ticketData.concert_id;
 
-    const subtotal = ticketData.price * item.quantity;
+    const subtotal = Number(ticketData.price) * quantity;
 
     totalPrice += subtotal;
 
     orderItems.push({
       ticket_category_id: ticketData.id,
-      quantity: item.quantity,
-      price: ticketData.price,
+      quantity,
+      price: Number(ticketData.price),
       subtotal,
     });
   }
 
   const newQtyInThisCheckout = orderItems.reduce(
-    (sum, i) => sum + i.quantity,
+    (sum, item) => sum + Number(item.quantity),
     0
   );
 
@@ -120,10 +127,22 @@ const createOrder = async (user_id, items) => {
     [user_id, concertId]
   );
 
-  const existingQty = existing[0].total_qty;
+  // PENTING:
+  // Hasil SUM dari MySQL bisa berupa string.
+  // Harus dikonversi ke Number sebelum dijumlahkan.
+  const existingQty = Number(existing[0].total_qty) || 0;
+
+  console.log("CHECK TICKET LIMIT:", {
+    user_id,
+    concertId,
+    existingQty,
+    newQtyInThisCheckout,
+    totalAfterCheckout: existingQty + newQtyInThisCheckout,
+  });
 
   if (existingQty + newQtyInThisCheckout > MAX_TICKETS_PER_CONCERT) {
     const sisa = MAX_TICKETS_PER_CONCERT - existingQty;
+
     throw new Error(
       sisa > 0
         ? `Maksimal ${MAX_TICKETS_PER_CONCERT} tiket per akun untuk concert ini. Sisa kuota kamu: ${sisa} tiket`
@@ -177,6 +196,7 @@ const createOrder = async (user_id, items) => {
   // Notif admin: ada order baru
   try {
     const summary = await getOrderNotifSummary(orderId);
+
     if (summary) {
       await adminNotificationModel.create({
         order_id: orderId,
@@ -262,8 +282,7 @@ const getOrderById = async (id) => {
     [id]
   );
 
-  // Ambil data payment (payment_method, paid_at, transaction_id, dll)
-  // Query terpisah biar nggak numpuk sama JOIN order_items di atas
+  // Ambil data payment
   const [payments] = await db.query(
     `
     SELECT
@@ -365,6 +384,7 @@ const cancelOrder = async (order_id, user_id) => {
   // Notif admin: order dibatalin customer
   try {
     const summary = await getOrderNotifSummary(order_id);
+
     if (summary) {
       await adminNotificationModel.create({
         order_id,
@@ -382,7 +402,6 @@ const cancelOrder = async (order_id, user_id) => {
 
 // ============================
 // MARK ORDER AS PAID
-// (dipanggil dari webhook, pakai midtrans_order_id, BUKAN order_code)
 // ============================
 const markAsPaid = async (midtransOrderId, paymentMethod, transactionId) => {
   const [payments] = await db.query(
@@ -472,6 +491,7 @@ const markAsPaid = async (midtransOrderId, paymentMethod, transactionId) => {
   // Notif admin: pembayaran diterima
   try {
     const summary = await getOrderNotifSummary(order.id);
+
     if (summary) {
       await adminNotificationModel.create({
         order_id: order.id,
@@ -491,7 +511,10 @@ const markAsPaid = async (midtransOrderId, paymentMethod, transactionId) => {
 const markAsExpired = async (midtransOrderId) => {
   const [payments] = await db.query(
     `
-    SELECT * FROM payments WHERE midtrans_order_id = ? LIMIT 1
+    SELECT *
+    FROM payments
+    WHERE midtrans_order_id = ?
+    LIMIT 1
     `,
     [midtransOrderId]
   );
@@ -504,12 +527,20 @@ const markAsExpired = async (midtransOrderId) => {
   await updateSeatsStatusByOrder(payments[0].order_id, "available");
 
   await db.query(
-    `UPDATE orders SET status = 'expired' WHERE id = ?`,
+    `
+    UPDATE orders
+    SET status = 'expired'
+    WHERE id = ?
+    `,
     [payments[0].order_id]
   );
 
   await db.query(
-    `UPDATE payments SET payment_status = 'expired' WHERE id = ?`,
+    `
+    UPDATE payments
+    SET payment_status = 'expired'
+    WHERE id = ?
+    `,
     [payments[0].id]
   );
 };
@@ -520,7 +551,10 @@ const markAsExpired = async (midtransOrderId) => {
 const markAsCancelled = async (midtransOrderId) => {
   const [payments] = await db.query(
     `
-    SELECT * FROM payments WHERE midtrans_order_id = ? LIMIT 1
+    SELECT *
+    FROM payments
+    WHERE midtrans_order_id = ?
+    LIMIT 1
     `,
     [midtransOrderId]
   );
@@ -533,18 +567,27 @@ const markAsCancelled = async (midtransOrderId) => {
   await updateSeatsStatusByOrder(payments[0].order_id, "available");
 
   await db.query(
-    `UPDATE orders SET status = 'cancelled' WHERE id = ?`,
+    `
+    UPDATE orders
+    SET status = 'cancelled'
+    WHERE id = ?
+    `,
     [payments[0].order_id]
   );
 
   await db.query(
-    `UPDATE payments SET payment_status = 'failed' WHERE id = ?`,
+    `
+    UPDATE payments
+    SET payment_status = 'failed'
+    WHERE id = ?
+    `,
     [payments[0].id]
   );
 
-  // Notif admin: pembayaran dibatalkan/ditolak
+  // Notif admin: order dibatalin/ditolak
   try {
     const summary = await getOrderNotifSummary(payments[0].order_id);
+
     if (summary) {
       await adminNotificationModel.create({
         order_id: payments[0].order_id,
@@ -558,6 +601,9 @@ const markAsCancelled = async (midtransOrderId) => {
   }
 };
 
+// ============================
+// DELETE ORDER
+// ============================
 const deleteOrder = async (id) => {
   await db.query(
     `

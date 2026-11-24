@@ -1,14 +1,16 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
+import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import api from "@/services/api";
 import {
-  AreaChart,
   Area,
   Bar,
-  Line,
+  PieChart,
+  Pie,
+  Cell,
   ComposedChart,
   XAxis,
   YAxis,
@@ -24,22 +26,29 @@ import {
   FaTags,
   FaTicketAlt,
   FaShoppingCart,
-  FaMoneyBillWave,
   FaSignOutAlt,
   FaUserShield,
   FaSearch,
   FaBell,
   FaPlus,
-  FaBolt,
   FaChartBar,
-  FaClipboardCheck,
-  FaClock,
-  FaImage,
+  FaChartPie,
   FaTimes,
   FaShoppingBag,
   FaCheckCircle,
   FaBan,
 } from "react-icons/fa";
+
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+const body = Figtree({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const HD = "font-[family-name:var(--font-display)]";
 
 // Base URL backend (bukan yang ada /api-nya), buat gabungin path avatar user.
 const API_BASE = "http://localhost:3000";
@@ -65,32 +74,48 @@ const getInitials = (name) => {
   return initials.join("") || "?";
 };
 
+// Avatar inisial: warna datar, bukan gradien
 const AVATAR_STYLES = [
-  "from-violet-600 to-fuchsia-600",
-  "from-sky-500 to-blue-600",
-  "from-amber-500 to-orange-600",
-  "from-emerald-500 to-teal-600",
-  "from-rose-500 to-pink-600",
+  "bg-[#2B3A5E] text-[#9DB7FF]",
+  "bg-[#1F4D45] text-[#6EE7B7]",
+  "bg-[#5A4320] text-[#F5B83D]",
+  "bg-[#5A2A32] text-[#FCA5A5]",
+  "bg-[#2D4A5E] text-[#7DD3FC]",
 ];
+
+// Warna & label tiap status (sama dengan status di halaman Orders)
+const STATUS_PIE = [
+  { key: "paid", label: "Dibayar", color: "#34D399" },
+  { key: "pending", label: "Menunggu", color: "#F5B83D" },
+  { key: "cancelled", label: "Dibatalkan", color: "#6B7690" },
+  { key: "expired", label: "Kedaluwarsa", color: "#F0675C" },
+];
+
+const STATUS_PILL = {
+  paid: "bg-emerald-400/10 text-emerald-300",
+  pending: "bg-amber-400/10 text-amber-300",
+  cancelled: "bg-slate-400/10 text-slate-300",
+  expired: "bg-red-400/10 text-red-300",
+};
 
 // Konfigurasi tampilan tiap tipe notif admin
 const notifTypeConfig = {
   order_created: {
     icon: FaShoppingBag,
-    color: "text-blue-400",
-    bg: "bg-blue-500/15",
+    color: "text-sky-300",
+    bg: "bg-sky-400/15",
     label: "Pesanan Baru",
   },
   payment_success: {
     icon: FaCheckCircle,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/15",
+    color: "text-emerald-300",
+    bg: "bg-emerald-400/15",
     label: "Pembayaran",
   },
   order_cancelled: {
     icon: FaBan,
-    color: "text-red-400",
-    bg: "bg-red-500/15",
+    color: "text-red-300",
+    bg: "bg-red-400/15",
     label: "Dibatalkan",
   },
 };
@@ -122,6 +147,9 @@ export default function DashboardPage() {
     upcoming_concerts: [], // [{ id, title, venue, date, banner }, ...]
   });
 
+  // Semua order (bukan cuma recent_orders), dipakai untuk diagram status transaksi
+  const [allOrders, setAllOrders] = useState([]);
+
   // State notifikasi admin
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifList, setNotifList] = useState([]);
@@ -134,9 +162,14 @@ export default function DashboardPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef(null);
 
+  // State hover potongan diagram bulat
+  const [pieHover, setPieHover] = useState(null);
+
   useEffect(() => {
     checkLogin();
     fetchUnreadCount();
+    fetchAllOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkLogin = async () => {
@@ -158,14 +191,35 @@ export default function DashboardPage() {
     } catch (err) {
       Swal.fire({
         icon: "error",
-        title: "Session Habis",
-        text: "Silahkan login kembali.",
+        title: "Sesi habis",
+        text: "Silakan login kembali.",
+        background: "#151D2E",
+        color: "#E8ECF4",
+        confirmButtonColor: "#F5B83D",
+        customClass: { confirmButton: "!text-[#1A1305] !font-semibold" },
       });
 
       localStorage.removeItem("token");
       router.push("/");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Ambil SEMUA order (endpoint yang sama dengan halaman Orders)
+  const fetchAllOrders = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const res = await api.get("/orders", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setAllOrders(res.data.data || []);
+    } catch (err) {
+      // silent, diagram donat cukup tampil kosong kalau gagal
+      console.log("Gagal fetch semua order", err);
     }
   };
 
@@ -238,14 +292,15 @@ export default function DashboardPage() {
 
   const logout = () => {
     Swal.fire({
-      title: "Logout ?",
+      title: "Keluar dari panel?",
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Logout",
-      background: "#141420",
-      color: "#e5e7eb",
-      confirmButtonColor: "#dc2626",
-      cancelButtonColor: "#374151",
+      confirmButtonText: "Keluar",
+      cancelButtonText: "Batal",
+      background: "#151D2E",
+      color: "#E8ECF4",
+      confirmButtonColor: "#DC2626",
+      cancelButtonColor: "#2C3858",
     }).then((result) => {
       if (result.isConfirmed) {
         localStorage.removeItem("token");
@@ -283,6 +338,17 @@ export default function DashboardPage() {
   const hasSearchResults =
     searchResults.orders.length > 0 || searchResults.concerts.length > 0;
 
+  // Data diagram bulat: komposisi status dari SEMUA transaksi
+  const pieData = useMemo(() => {
+    return STATUS_PIE.map((s) => ({
+      ...s,
+      value: allOrders.filter((o) => o.status === s.key).length,
+    }));
+  }, [allOrders]);
+
+  const pieTotal = pieData.reduce((sum, s) => sum + s.value, 0);
+  const pieActive = pieHover !== null ? pieData[pieHover] : null;
+
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -294,11 +360,15 @@ export default function DashboardPage() {
     setSearchOpen(false);
   };
 
+  const rootClass = `${display.variable} ${body.variable} font-[family-name:var(--font-body)]`;
+
   if (loading) {
     return (
-      <div className="h-screen flex flex-col justify-center items-center gap-4 bg-[#0b0b13] text-white">
-        <div className="w-10 h-10 border-[3px] border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-        <p className="text-sm text-gray-500 tracking-wide">Memuat dashboard...</p>
+      <div
+        className={`${rootClass} h-screen flex flex-col justify-center items-center gap-4 bg-[#0C1220] text-[#E8ECF4]`}
+      >
+        <div className="w-9 h-9 border-[3px] border-[#F5B83D]/25 border-t-[#F5B83D] rounded-full animate-spin motion-reduce:animate-none" />
+        <p className="text-sm text-[#8B96AD]">Memuat dashboard...</p>
       </div>
     );
   }
@@ -313,96 +383,37 @@ export default function DashboardPage() {
     { href: "/manage-admin", icon: FaUserShield, label: "Manage Admin" },
   ];
 
-  const statCards = [
-    {
-      label: "TOTAL KONSER",
-      value: dashboard.total_concert,
-      icon: FaMusic,
-      accent: "text-indigo-400",
-      ring: "bg-indigo-500/15",
-      bar: "bg-indigo-500",
-    },
-    {
-      label: "TOTAL ARTIS",
-      value: dashboard.total_artist,
-      icon: FaUsers,
-      accent: "text-emerald-400",
-      ring: "bg-emerald-500/15",
-      bar: "bg-emerald-500",
-    },
-    {
-      label: "TIKET TERJUAL",
-      value: dashboard.total_order,
-      icon: FaTicketAlt,
-      accent: "text-orange-400",
-      ring: "bg-orange-500/15",
-      bar: "bg-orange-500",
-    },
-    {
-      label: "PENDAPATAN",
-      value: `Rp${Number(dashboard.total_revenue).toLocaleString("id-ID")}`,
-      icon: FaMoneyBillWave,
-      accent: "text-pink-400",
-      ring: "bg-pink-500/15",
-      bar: "bg-pink-500",
-    },
-    {
-      label: "GENRE",
-      value: dashboard.total_genre,
-      icon: FaClock,
-      accent: "text-sky-400",
-      ring: "bg-sky-500/15",
-      bar: "bg-sky-500",
-    },
-  ];
+  const monthlyTickets = dashboard.monthly_stats.reduce(
+    (sum, m) => sum + Number(m.tickets || 0),
+    0
+  );
+  const monthlyRevenue =
+    dashboard.monthly_stats.reduce((sum, m) => sum + Number(m.revenue || 0), 0) *
+    1000000;
 
-  const quickActions = [
-    {
-      title: "Tambah Konser",
-      desc: "Daftarkan event baru ke database",
-      icon: FaPlus,
-      color: "bg-violet-500/20 text-violet-400",
-      href: "/concert",
-    },
-    {
-      title: "Tambah Artist",
-      desc: "Daftarkan musisi ke database",
-      icon: FaUsers,
-      color: "bg-emerald-500/20 text-emerald-400",
-      href: "/artist",
-    },
-    {
-      title: "Kelola Tiket",
-      desc: "Atur kategori & kuota tiket",
-      icon: FaTicketAlt,
-      color: "bg-amber-500/20 text-amber-400",
-      href: "/ticket",
-    },
-    {
-      title: "Lihat Orders",
-      desc: "Pantau transaksi pelanggan",
-      icon: FaClipboardCheck,
-      color: "bg-blue-500/20 text-blue-400",
-      href: "/orders",
-    },
+  const smallStats = [
+    { label: "Tiket terjual", value: dashboard.total_order },
+    { label: "Total konser", value: dashboard.total_concert },
+    { label: "Total artis", value: dashboard.total_artist },
+    { label: "Genre", value: dashboard.total_genre },
   ];
 
   return (
-    <div className="flex min-h-screen bg-[#0b0b13] text-white">
-      {/* SIDEBAR */}
-      <aside className="w-72 bg-[#101018] border-r border-white/5 relative flex flex-col">
-        <div className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full bg-violet-600/10 blur-3xl" />
-
-        <div className="p-8 border-b border-white/5 relative">
-          <h1 className="text-2xl font-bold flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-600/30 rotate-3">
-              <FaTicketAlt size={15} className="text-white" />
-            </span>
-            Concert<span className="text-violet-400">X</span>
-          </h1>
+    <div
+      className={`${rootClass} flex min-h-screen bg-[#0C1220] text-[#E8ECF4] selection:bg-[#F5B83D] selection:text-[#1A1305]`}
+    >
+      {/* ================= SIDEBAR ================= */}
+      <aside className="w-64 shrink-0 sticky top-0 h-screen bg-[#101727] border-r border-white/[0.06] flex flex-col">
+        <div className="px-7 py-7 flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded-lg bg-[#F5B83D] text-[#1A1305] flex items-center justify-center">
+            <FaTicketAlt size={15} />
+          </span>
+          <span className={`${HD} text-xl font-bold tracking-tight`}>
+            Lokatix
+          </span>
         </div>
 
-        <div className="p-5 space-y-1 relative flex-1">
+        <nav className="px-4 space-y-0.5 flex-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/dashboard";
@@ -410,48 +421,53 @@ export default function DashboardPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative w-full rounded-xl py-3 flex items-center gap-4 px-5 text-sm font-medium transition-all ${
+                className={`relative flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D] ${
                   active
-                    ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-600/25"
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
+                    ? "bg-white/[0.07] text-white"
+                    : "text-[#8B96AD] hover:bg-white/[0.04] hover:text-white"
                 }`}
               >
                 {active && (
-                  <span className="absolute -left-5 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-white" />
+                  <span className="absolute -left-4 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-[#F5B83D]" />
                 )}
-                <Icon size={15} />
+                <Icon
+                  size={14}
+                  className={active ? "text-[#F5B83D]" : ""}
+                />
                 {item.label}
               </Link>
             );
           })}
-        </div>
+        </nav>
 
-        <div className="p-5 relative">
-          <div className="border-t border-dashed border-white/10 mb-5" />
+        <div className="p-4">
           <button
             onClick={logout}
-            className="bg-red-600/90 hover:bg-red-600 w-full py-3 rounded-xl flex justify-center items-center gap-3 text-sm font-semibold transition-colors shadow-lg shadow-red-600/10"
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-red-400/25 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
-            <FaSignOutAlt size={13} />
+            <FaSignOutAlt size={12} />
             Keluar
           </button>
         </div>
       </aside>
 
-      {/* CONTENT */}
+      {/* ================= CONTENT ================= */}
       <main className="flex-1 min-w-0">
         {/* NAVBAR */}
-        <div className="px-10 py-7 flex justify-between items-center border-b border-white/5 bg-[#0b0b13]/80 backdrop-blur sticky top-0 z-30">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-6 border-b border-white/[0.06] bg-[#0C1220]/85 px-10 py-6 backdrop-blur">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Ringkasan Dashboard</h1>
-            <p className="text-gray-500 mt-1 text-sm">
+            <h1 className={`${HD} text-3xl font-bold tracking-tight`}>
+              Ringkasan
+            </h1>
+            <p className="mt-1 text-sm text-[#8B96AD]">
               Selamat datang kembali. Berikut update hari ini.
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* SEARCH */}
             <div className="relative hidden md:block" ref={searchRef}>
-              <FaSearch className="absolute left-4 top-3.5 text-gray-500 text-sm" />
+              <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
               <input
                 type="text"
                 value={searchQuery}
@@ -459,13 +475,15 @@ export default function DashboardPage() {
                 onFocus={() => {
                   if (searchQuery.trim().length > 0) setSearchOpen(true);
                 }}
-                placeholder="Cari data, tiket, atau konser..."
-                className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-9 py-3 w-72 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40 placeholder:text-gray-500 transition"
+                placeholder="Cari transaksi atau konser"
+                aria-label="Cari transaksi atau konser"
+                className="h-11 w-72 rounded-lg border border-[#2C3858] bg-[#151D2E] pl-9 pr-9 text-sm text-[#E8ECF4] outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15"
               />
               {searchQuery && (
                 <button
                   onClick={clearSearch}
-                  className="absolute right-3 top-3.5 text-gray-500 hover:text-white transition"
+                  aria-label="Hapus pencarian"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5E6A87] transition hover:text-white"
                 >
                   <FaTimes size={12} />
                 </button>
@@ -478,11 +496,11 @@ export default function DashboardPage() {
                     className="fixed inset-0 z-40"
                     onClick={() => setSearchOpen(false)}
                   />
-                  <div className="absolute left-0 mt-3 w-[26rem] bg-[#141420] border border-white/10 rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
-                    <div className="px-5 py-3 border-b border-white/5">
-                      <p className="text-xs text-gray-500">
+                  <div className="absolute left-0 z-50 mt-2 w-[26rem] overflow-hidden rounded-xl border border-[#2C3858] bg-[#151D2E] shadow-2xl shadow-black/60">
+                    <div className="border-b border-white/[0.06] px-5 py-3">
+                      <p className="text-xs text-[#8B96AD]">
                         Hasil untuk{" "}
-                        <span className="text-gray-300 font-semibold">
+                        <span className="font-semibold text-[#E8ECF4]">
                           "{searchQuery}"
                         </span>
                       </p>
@@ -490,15 +508,12 @@ export default function DashboardPage() {
 
                     <div className="max-h-[420px] overflow-y-auto">
                       {!hasSearchResults ? (
-                        <div className="py-10 px-6 flex flex-col items-center text-center">
-                          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-                            <FaSearch className="text-gray-600" />
-                          </div>
+                        <div className="flex flex-col items-center px-6 py-10 text-center">
                           <p className="text-sm font-semibold">
                             Tidak ada hasil
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Coba kata kunci lain, misal nama konser atau ID
+                          <p className="mt-1 text-xs text-[#8B96AD]">
+                            Coba nama konser, nama pelanggan, atau kode
                             transaksi.
                           </p>
                         </div>
@@ -506,7 +521,7 @@ export default function DashboardPage() {
                         <>
                           {searchResults.concerts.length > 0 && (
                             <div>
-                              <p className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                              <p className="px-5 pb-1 pt-3 text-xs font-medium text-[#8B96AD]">
                                 Konser
                               </p>
                               {searchResults.concerts.map((item) => {
@@ -516,14 +531,14 @@ export default function DashboardPage() {
                                     key={`concert-${item.id}`}
                                     href="/concert"
                                     onClick={() => setSearchOpen(false)}
-                                    className="flex items-center gap-3 px-5 py-3 hover:bg-white/5 transition"
+                                    className="flex items-center gap-3 px-5 py-3 transition hover:bg-white/[0.04]"
                                   >
-                                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shrink-0">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#1B2539]">
                                       {imageUrl ? (
                                         <img
                                           src={imageUrl}
                                           alt={item.title}
-                                          className="w-full h-full object-cover"
+                                          className="h-full w-full object-cover"
                                           onError={(e) => {
                                             e.target.style.display = "none";
                                           }}
@@ -531,15 +546,15 @@ export default function DashboardPage() {
                                       ) : (
                                         <FaMusic
                                           size={12}
-                                          className="text-white/80"
+                                          className="text-[#8B96AD]"
                                         />
                                       )}
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-semibold truncate">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-semibold">
                                         {item.title}
                                       </p>
-                                      <p className="text-xs text-gray-500 truncate">
+                                      <p className="truncate text-xs text-[#8B96AD]">
                                         {item.venue}
                                       </p>
                                     </div>
@@ -551,7 +566,7 @@ export default function DashboardPage() {
 
                           {searchResults.orders.length > 0 && (
                             <div>
-                              <p className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">
+                              <p className="px-5 pb-1 pt-3 text-xs font-medium text-[#8B96AD]">
                                 Transaksi
                               </p>
                               {searchResults.orders.map((item) => (
@@ -559,23 +574,23 @@ export default function DashboardPage() {
                                   key={`order-${item.id}`}
                                   href={`/orders?highlight=${item.id}`}
                                   onClick={() => setSearchOpen(false)}
-                                  className="flex items-center gap-3 px-5 py-3 hover:bg-white/5 transition"
+                                  className="flex items-center gap-3 px-5 py-3 transition hover:bg-white/[0.04]"
                                 >
-                                  <div className="w-9 h-9 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sky-400/15">
                                     <FaShoppingBag
                                       size={12}
-                                      className="text-blue-400"
+                                      className="text-sky-300"
                                     />
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold truncate">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold">
                                       #{item.order_code} — {item.full_name}
                                     </p>
-                                    <p className="text-xs text-gray-500 truncate">
+                                    <p className="truncate text-xs text-[#8B96AD]">
                                       {item.concert_title || "-"} · Rp{" "}
-                                      {Number(
-                                        item.total_price
-                                      ).toLocaleString("id-ID")}
+                                      {Number(item.total_price).toLocaleString(
+                                        "id-ID"
+                                      )}
                                     </p>
                                   </div>
                                 </Link>
@@ -590,14 +605,16 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {/* NOTIF */}
             <div className="relative">
               <button
                 onClick={openNotifPopup}
-                className="relative w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-violet-500/40 transition"
+                aria-label="Notifikasi"
+                className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-[#2C3858] bg-[#151D2E] text-[#8B96AD] transition hover:border-[#F5B83D]/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D]"
               >
                 <FaBell />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 border-2 border-[#0b0b13] flex items-center justify-center text-[10px] font-bold">
+                  <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-[#0C1220] bg-[#F5B83D] px-1 text-[10px] font-bold text-[#1A1305]">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
@@ -606,24 +623,24 @@ export default function DashboardPage() {
               {/* DROPDOWN NOTIF */}
               {notifOpen && (
                 <>
-                  {/* backdrop buat nutup pas klik luar */}
                   <div
                     className="fixed inset-0 z-40"
                     onClick={() => setNotifOpen(false)}
                   />
-                  <div className="absolute right-0 mt-3 w-96 bg-[#141420] border border-white/10 rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+                  <div className="absolute right-0 z-50 mt-2 w-96 overflow-hidden rounded-xl border border-[#2C3858] bg-[#151D2E] shadow-2xl shadow-black/60">
+                    <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
                       <div>
-                        <h3 className="font-bold text-sm">Notifikasi</h3>
+                        <h3 className="text-sm font-bold">Notifikasi</h3>
                         {markingRead && (
-                          <p className="text-[11px] text-violet-400 mt-0.5">
+                          <p className="mt-0.5 text-[11px] text-[#F5B83D]">
                             Menandai dibaca...
                           </p>
                         )}
                       </div>
                       <button
                         onClick={() => setNotifOpen(false)}
-                        className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition"
+                        aria-label="Tutup notifikasi"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-[#8B96AD] transition hover:bg-white/[0.06] hover:text-white"
                       >
                         <FaTimes size={12} />
                       </button>
@@ -631,19 +648,16 @@ export default function DashboardPage() {
 
                     <div className="max-h-[420px] overflow-y-auto">
                       {notifLoading ? (
-                        <div className="py-14 flex justify-center">
-                          <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="flex justify-center py-14">
+                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#F5B83D] border-t-transparent motion-reduce:animate-none" />
                         </div>
                       ) : notifList.length === 0 ? (
-                        <div className="py-12 px-6 flex flex-col items-center text-center">
-                          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-                            <FaBell className="text-gray-600" />
-                          </div>
+                        <div className="flex flex-col items-center px-6 py-12 text-center">
                           <p className="text-sm font-semibold">
                             Belum ada notifikasi
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Aktivitas order & pembayaran akan muncul di sini.
+                          <p className="mt-1 text-xs text-[#8B96AD]">
+                            Aktivitas order dan pembayaran akan muncul di sini.
                           </p>
                         </div>
                       ) : (
@@ -657,28 +671,28 @@ export default function DashboardPage() {
                               key={item.id}
                               href={`/orders?highlight=${item.order_id}`}
                               onClick={() => setNotifOpen(false)}
-                              className={`flex gap-3 px-5 py-4 border-b border-white/5 hover:bg-white/5 transition ${
-                                !item.is_read ? "bg-violet-500/[0.06]" : ""
+                              className={`flex gap-3 border-b border-white/[0.06] px-5 py-4 transition hover:bg-white/[0.04] ${
+                                !item.is_read ? "bg-[#F5B83D]/[0.05]" : ""
                               }`}
                             >
                               <div
-                                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${config.bg}`}
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${config.bg}`}
                               >
                                 <Icon size={14} className={config.color} />
                               </div>
-                              <div className="flex-1 min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                   {!item.is_read && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F5B83D]" />
                                   )}
-                                  <p className="text-sm font-semibold truncate">
+                                  <p className="truncate text-sm font-semibold">
                                     {item.title}
                                   </p>
                                 </div>
-                                <p className="text-xs text-gray-400 mt-1 line-clamp-2">
+                                <p className="mt-1 line-clamp-2 text-xs text-[#8B96AD]">
                                   {item.message}
                                 </p>
-                                <p className="text-[11px] text-gray-600 mt-1.5">
+                                <p className="mt-1.5 text-[11px] text-[#5E6A87]">
                                   {formatNotifDate(item.created_at)}
                                 </p>
                               </div>
@@ -694,165 +708,107 @@ export default function DashboardPage() {
 
             <Link
               href="/concert"
-              className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-semibold transition-all shadow-lg shadow-violet-600/20 active:scale-[0.98]"
+              className="flex h-11 items-center gap-2 rounded-lg bg-[#F5B83D] px-5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30"
             >
-              <FaPlus size={12} />
-              Buat Event
+              <FaPlus size={11} />
+              Buat event
             </Link>
           </div>
-        </div>
+        </header>
 
-        <div className="p-10 space-y-8">
-          {/* STAT CARDS */}
-          <div className="grid grid-cols-5 gap-5">
-            {statCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.label}
-                  className="relative bg-[#141420] rounded-2xl p-6 border border-white/5 overflow-hidden hover:border-white/10 hover:-translate-y-0.5 transition-all"
+        <div className="space-y-6 p-10">
+          {/* ===== RINGKASAN ANGKA: satu strip, pendapatan jadi fokus ===== */}
+          <section className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.06] lg:grid-cols-6">
+            <div className="col-span-2 bg-[#151D2E] p-7">
+              <p className="text-sm text-[#8B96AD]">Total pendapatan</p>
+              <p
+                className={`${HD} mt-3 truncate text-4xl font-bold tracking-tight text-[#F5B83D]`}
+              >
+                Rp{Number(dashboard.total_revenue).toLocaleString("id-ID")}
+              </p>
+            </div>
+            {smallStats.map((s) => (
+              <div key={s.label} className="bg-[#151D2E] p-7">
+                <p className="text-sm text-[#8B96AD]">{s.label}</p>
+                <p
+                  className={`${HD} mt-3 truncate text-3xl font-bold tracking-tight`}
                 >
-                  <span
-                    className={`absolute top-0 left-0 right-0 h-[3px] ${card.bar}`}
-                  />
-                  <div className="flex justify-between items-start">
-                    <div className="min-w-0">
-                      <p className="text-gray-500 text-[11px] font-semibold tracking-wide">
-                        {card.label}
-                      </p>
-                      <h1 className="text-2xl font-bold mt-3 truncate">
-                        {card.value}
-                      </h1>
-                    </div>
-                    <div
-                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${card.ring}`}
-                    >
-                      <Icon size={18} className={card.accent} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  {Number(s.value).toLocaleString("id-ID")}
+                </p>
+              </div>
+            ))}
+          </section>
 
-          {/* CHART + QUICK ACTIONS */}
-          <div className="grid grid-cols-3 gap-6">
+          {/* ===== CHART PENJUALAN + DIAGRAM BULAT ===== */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             {/* CHART */}
-            <div className="col-span-2 bg-[#141420] rounded-2xl border border-white/5 p-8">
-              <div className="flex justify-between items-start mb-2">
+            <section className="rounded-2xl bg-[#151D2E] p-8 ring-1 ring-white/[0.06] xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center">
-                      <FaChartBar className="text-violet-400" size={14} />
-                    </span>
-                    Analisis Penjualan & Pendapatan
+                  <h2 className={`${HD} text-xl font-bold tracking-tight`}>
+                    Penjualan dan pendapatan
                   </h2>
-                  <p className="text-gray-500 text-sm mt-1 ml-10">
-                     Statistik performa platform 14 hari terakhir
+                  <p className="mt-1 text-sm text-[#8B96AD]">
+                    Per bulan, 6 bulan terakhir
                   </p>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-5 text-xs text-[#8B96AD]">
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-sm bg-violet-500" />
-                    <span className="text-gray-400">Tiket Terjual</span>
+                    <span className="h-3 w-3 rounded-sm bg-[#F5B83D]" />
+                    Tiket terjual
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-fuchsia-400" />
-                    <span className="text-gray-400">Pendapatan</span>
+                    <span className="h-0.5 w-4 rounded-full bg-[#8FB4FF]" />
+                    Pendapatan
                   </div>
                 </div>
               </div>
 
-              {/* MINI SUMMARY */}
-              <div className="grid grid-cols-2 gap-4 my-6">
-                <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <p className="text-gray-500 text-xs">Total Tiket (6 bulan)</p>
-                  <p className="text-2xl font-bold mt-1 text-violet-400">
-                    {dashboard.monthly_stats
-                      .reduce((sum, m) => sum + Number(m.tickets || 0), 0)
-                      .toLocaleString("id-ID")}
+              {/* ringkasan, tanpa kotak di dalam kotak */}
+              <div className="my-7 flex flex-wrap gap-x-12 gap-y-4">
+                <div>
+                  <p className="text-sm text-[#8B96AD]">Total tiket</p>
+                  <p
+                    className={`${HD} mt-1 text-2xl font-bold text-[#F5B83D]`}
+                  >
+                    {monthlyTickets.toLocaleString("id-ID")}
                   </p>
                 </div>
-                <div className="bg-white/[0.03] rounded-xl p-4 border border-white/5">
-                  <p className="text-gray-500 text-xs">
-                    Total Pendapatan (6 bulan)
-                  </p>
-                  <p className="text-2xl font-bold mt-1 text-fuchsia-400">
-                    Rp{" "}
-                    {(
-                      dashboard.monthly_stats.reduce(
-                        (sum, m) => sum + Number(m.revenue || 0),
-                        0
-                      ) * 1000000
-                    ).toLocaleString("id-ID")}
+                <div>
+                  <p className="text-sm text-[#8B96AD]">Total pendapatan</p>
+                  <p
+                    className={`${HD} mt-1 text-2xl font-bold text-[#8FB4FF]`}
+                  >
+                    Rp {monthlyRevenue.toLocaleString("id-ID")}
                   </p>
                 </div>
               </div>
 
               <div className="h-72">
                 {dashboard.monthly_stats.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-600 text-sm gap-2">
-                    <FaChartBar size={22} className="text-gray-700" />
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-[#5E6A87]">
+                    <FaChartBar size={22} />
                     Belum ada data statistik.
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={dashboard.monthly_stats}>
-                      <defs>
-                        <linearGradient
-                          id="revenueGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="5%"
-                            stopColor="#e879f9"
-                            stopOpacity={0.35}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor="#e879f9"
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                        <linearGradient
-                          id="ticketGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="0%"
-                            stopColor="#a78bfa"
-                            stopOpacity={1}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#7c3aed"
-                            stopOpacity={0.6}
-                          />
-                        </linearGradient>
-                      </defs>
-
                       <CartesianGrid
                         strokeDasharray="3 3"
-                        stroke="rgba(255,255,255,0.05)"
+                        stroke="rgba(255,255,255,0.06)"
                         vertical={false}
                       />
                       <XAxis
                         dataKey="month"
-                        stroke="#6b7280"
+                        stroke="#5E6A87"
                         fontSize={12}
                         axisLine={false}
                         tickLine={false}
                       />
                       <YAxis
                         yAxisId="left"
-                        stroke="#6b7280"
+                        stroke="#5E6A87"
                         fontSize={12}
                         axisLine={false}
                         tickLine={false}
@@ -860,7 +816,7 @@ export default function DashboardPage() {
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke="#6b7280"
+                        stroke="#5E6A87"
                         fontSize={12}
                         axisLine={false}
                         tickLine={false}
@@ -869,10 +825,10 @@ export default function DashboardPage() {
                       <Tooltip
                         cursor={{ fill: "rgba(255,255,255,0.03)" }}
                         contentStyle={{
-                          background: "#1c1c28",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: 12,
-                          color: "#fff",
+                          background: "#1B2539",
+                          border: "1px solid #2C3858",
+                          borderRadius: 10,
+                          color: "#E8ECF4",
                           fontSize: 13,
                         }}
                         formatter={(value, name) => {
@@ -886,8 +842,9 @@ export default function DashboardPage() {
                         yAxisId="left"
                         dataKey="tickets"
                         name="Tiket Terjual"
-                        fill="url(#ticketGradient)"
-                        radius={[8, 8, 0, 0]}
+                        fill="#F5B83D"
+                        fillOpacity={0.9}
+                        radius={[6, 6, 0, 0]}
                         barSize={28}
                       />
                       <Area
@@ -895,79 +852,134 @@ export default function DashboardPage() {
                         type="monotone"
                         dataKey="revenue"
                         name="Pendapatan (Juta Rp)"
-                        stroke="#e879f9"
-                        strokeWidth={3}
-                        fill="url(#revenueGradient)"
-                        dot={{ r: 4, fill: "#e879f9", strokeWidth: 0 }}
-                        activeDot={{ r: 6 }}
+                        stroke="#8FB4FF"
+                        strokeWidth={2.5}
+                        fill="#8FB4FF"
+                        fillOpacity={0.08}
+                        dot={{ r: 3.5, fill: "#8FB4FF", strokeWidth: 0 }}
+                        activeDot={{ r: 5 }}
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </div>
-            </div>
+            </section>
 
-            {/* QUICK ACTIONS */}
-            <div className="bg-[#141420] rounded-2xl border border-white/5 p-8">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <span className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                  <FaBolt className="text-amber-400" size={14} />
-                </span>
-                Cepat Kelola
-              </h2>
-              <p className="text-gray-500 text-sm mt-1 mb-6 ml-10">
-                Aksi cepat untuk tugas administratif harian
-              </p>
-
-              <div className="space-y-3">
-                {quickActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <Link
-                      key={action.title}
-                      href={action.href}
-                      className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-white/10 hover:bg-white/5 transition-all group"
-                    >
-                      <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${action.color}`}
-                      >
-                        <Icon size={18} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm">
-                          {action.title}
-                        </p>
-                        <p className="text-gray-500 text-xs">{action.desc}</p>
-                      </div>
-                    </Link>
-                  );
-                })}
+            {/* DIAGRAM BULAT */}
+            <section className="flex flex-col rounded-2xl bg-[#151D2E] p-8 ring-1 ring-white/[0.06]">
+              <div className="mb-6">
+                <h2 className={`${HD} text-xl font-bold tracking-tight`}>
+                  Status transaksi
+                </h2>
+                <p className="mt-1 text-sm text-[#8B96AD]">
+                  Dari semua transaksi
+                </p>
               </div>
-            </div>
+
+              {pieTotal === 0 ? (
+                <div className="flex min-h-60 flex-1 flex-col items-center justify-center gap-2 text-sm text-[#5E6A87]">
+                  <FaChartPie size={22} />
+                  Belum ada transaksi.
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col justify-center">
+                  <div className="relative h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData.filter((s) => s.value > 0)}
+                          dataKey="value"
+                          nameKey="label"
+                          innerRadius={58}
+                          outerRadius={82}
+                          paddingAngle={3}
+                          stroke="none"
+                          onMouseEnter={(_, index) => {
+                            const visible = pieData.filter((s) => s.value > 0);
+                            const key = visible[index]?.key;
+                            setPieHover(
+                              pieData.findIndex((s) => s.key === key)
+                            );
+                          }}
+                          onMouseLeave={() => setPieHover(null)}
+                        >
+                          {pieData
+                            .filter((s) => s.value > 0)
+                            .map((s) => (
+                              <Cell key={s.key} fill={s.color} />
+                            ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <span
+                        className={`${HD} text-3xl font-bold leading-none`}
+                      >
+                        {pieActive ? pieActive.value : pieTotal}
+                      </span>
+                      <span className="mt-1 text-xs text-[#8B96AD]">
+                        {pieActive ? pieActive.label : "Total transaksi"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-2.5">
+                    {pieData.map((seg) => {
+                      const pct = Math.round((seg.value / pieTotal) * 100);
+                      return (
+                        <div
+                          key={seg.key}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: seg.color }}
+                            />
+                            <span className="text-[#C9D1E3]">{seg.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{seg.value}</span>
+                            <span className="w-9 text-right text-xs text-[#8B96AD]">
+                              {pct}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
 
-          {/* RECENT ORDERS + UPCOMING CONCERTS */}
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-2 bg-[#141420] rounded-2xl border border-white/5 p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h1 className="text-lg font-bold">Penjualan Tiket Terbaru</h1>
+          {/* ===== TRANSAKSI TERBARU + KONSER MENDATANG ===== */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <section className="rounded-2xl bg-[#151D2E] p-8 ring-1 ring-white/[0.06] xl:col-span-2">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className={`${HD} text-xl font-bold tracking-tight`}>
+                  Penjualan tiket terbaru
+                </h2>
                 <Link
                   href="/orders"
-                  className="text-violet-400 text-sm font-semibold hover:text-violet-300 transition"
+                  className="text-sm font-semibold text-[#F5B83D] transition hover:text-[#FFC857]"
                 >
-                  Lihat Semua 
+                  Lihat semua
                 </Link>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/5 text-gray-500 text-[11px] uppercase tracking-wide">
-                      <th className="text-left py-3 font-semibold">ID Transaksi</th>
-                      <th className="text-left font-semibold">Pelanggan</th>
-                      <th className="text-left font-semibold">Konser</th>
-                      <th className="text-left font-semibold">Total</th>
-                      <th className="text-left font-semibold">Status</th>
+                    <tr className="border-b border-white/[0.06] text-xs text-[#5E6A87]">
+                      <th className="py-3 text-left font-medium">
+                        ID transaksi
+                      </th>
+                      <th className="text-left font-medium">Pelanggan</th>
+                      <th className="text-left font-medium">Konser</th>
+                      <th className="text-left font-medium">Total</th>
+                      <th className="text-left font-medium">Status</th>
                     </tr>
                   </thead>
 
@@ -976,7 +988,7 @@ export default function DashboardPage() {
                       <tr>
                         <td
                           colSpan="5"
-                          className="text-center py-10 text-gray-500"
+                          className="py-10 text-center text-[#8B96AD]"
                         >
                           Belum ada transaksi.
                         </td>
@@ -985,13 +997,16 @@ export default function DashboardPage() {
                       dashboard.recent_orders.map((item, idx) => {
                         const avatarStyle =
                           AVATAR_STYLES[idx % AVATAR_STYLES.length];
+                        const statusLabel =
+                          STATUS_PIE.find((s) => s.key === item.status)
+                            ?.label || item.status;
 
                         return (
                           <tr
                             key={item.id}
-                            className="border-b border-white/5 hover:bg-white/[0.04] transition-colors"
+                            className="border-b border-white/[0.06] transition-colors last:border-0 hover:bg-white/[0.03]"
                           >
-                            <td className="py-4 font-semibold text-violet-300">
+                            <td className="py-4 font-semibold text-[#F5B83D]">
                               #{item.order_code}
                             </td>
                             <td>
@@ -1000,11 +1015,11 @@ export default function DashboardPage() {
                                   <img
                                     src={getAvatarUrl(item.avatar)}
                                     alt={item.full_name}
-                                    className="w-7 h-7 rounded-full object-cover shrink-0"
+                                    className="h-7 w-7 shrink-0 rounded-full object-cover"
                                   />
                                 ) : (
                                   <span
-                                    className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarStyle} flex items-center justify-center text-[10px] font-bold shrink-0`}
+                                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarStyle}`}
                                   >
                                     {getInitials(item.full_name)}
                                   </span>
@@ -1012,7 +1027,7 @@ export default function DashboardPage() {
                                 {item.full_name}
                               </div>
                             </td>
-                            <td className="text-gray-400">
+                            <td className="text-[#8B96AD]">
                               {item.concert_title || "-"}
                             </td>
                             <td className="font-medium">
@@ -1023,15 +1038,12 @@ export default function DashboardPage() {
                             </td>
                             <td>
                               <span
-                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                  item.status === "paid"
-                                    ? "bg-emerald-500/15 text-emerald-400"
-                                    : item.status === "pending"
-                                    ? "bg-amber-500/15 text-amber-400"
-                                    : "bg-red-500/15 text-red-400"
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                                  STATUS_PILL[item.status] ||
+                                  "bg-red-400/10 text-red-300"
                                 }`}
                               >
-                                {item.status}
+                                {statusLabel}
                               </span>
                             </td>
                           </tr>
@@ -1041,23 +1053,25 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </section>
 
             {/* UPCOMING CONCERTS */}
-            <div className="bg-[#141420] rounded-2xl border border-white/5 p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h1 className="text-lg font-bold">Konser Mendatang</h1>
+            <section className="rounded-2xl bg-[#151D2E] p-8 ring-1 ring-white/[0.06]">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className={`${HD} text-xl font-bold tracking-tight`}>
+                  Konser mendatang
+                </h2>
                 <Link
                   href="/concert"
-                  className="text-violet-400 text-sm font-semibold hover:text-violet-300 transition"
+                  className="text-sm font-semibold text-[#F5B83D] transition hover:text-[#FFC857]"
                 >
-                  Lihat Semua 
+                  Lihat semua
                 </Link>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-1">
                 {dashboard.upcoming_concerts.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-6">
+                  <p className="py-6 text-center text-sm text-[#8B96AD]">
                     Belum ada konser mendatang.
                   </p>
                 ) : (
@@ -1066,30 +1080,30 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center gap-4 p-3 rounded-xl border border-transparent hover:border-white/10 hover:bg-white/5 transition-all"
+                        className="flex items-center gap-4 rounded-xl p-3 transition-colors hover:bg-white/[0.04]"
                       >
-                        <div className="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shrink-0">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#1B2539]">
                           {imageUrl ? (
                             <img
                               src={imageUrl}
                               alt={item.title}
-                              className="w-full h-full object-cover"
+                              className="h-full w-full object-cover"
                               onError={(e) => {
                                 e.target.style.display = "none";
                               }}
                             />
                           ) : (
-                            <FaMusic className="text-white/80" />
+                            <FaMusic className="text-[#5E6A87]" />
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm truncate">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">
                             {item.title}
                           </p>
-                          <p className="text-gray-500 text-xs truncate">
+                          <p className="truncate text-xs text-[#8B96AD]">
                             {item.venue}
                           </p>
-                          <p className="text-gray-600 text-xs mt-1">
+                          <p className="mt-1 text-xs text-[#5E6A87]">
                             {item.date
                               ? new Date(item.date).toLocaleDateString("id-ID")
                               : "-"}
@@ -1100,7 +1114,7 @@ export default function DashboardPage() {
                   })
                 )}
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </main>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "@/services/api";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
+import { Bricolage_Grotesque, Figtree } from "next/font/google";
 
 import {
   FaHome,
@@ -23,18 +24,30 @@ import {
   FaTimes,
 } from "react-icons/fa";
 
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+const body = Figtree({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const HD = "font-[family-name:var(--font-display)]";
+
 const EMPTY_FORM = {
   full_name: "",
   email: "",
   password: "",
 };
 
+// Avatar inisial: warna datar, bukan gradien
 const AVATAR_STYLES = [
-  "from-violet-600 to-fuchsia-600",
-  "from-sky-500 to-blue-600",
-  "from-amber-500 to-orange-600",
-  "from-emerald-500 to-teal-600",
-  "from-rose-500 to-pink-600",
+  "bg-[#2B3A5E] text-[#9DB7FF]",
+  "bg-[#1F4D45] text-[#6EE7B7]",
+  "bg-[#5A4320] text-[#F5B83D]",
+  "bg-[#5A2A32] text-[#FCA5A5]",
+  "bg-[#2D4A5E] text-[#7DD3FC]",
 ];
 
 const IMAGE_BASE_URL = "http://localhost:3000";
@@ -49,58 +62,28 @@ const getInitials = (name) => {
   return initials.join("") || "?";
 };
 
-// ==== Swal styling, disamakan persis dengan halaman Artist ====
-const SWAL_BASE_STYLE = `
-  .cx-popup { background:#141420 !important; border:1px solid rgba(255,255,255,0.08) !important; border-radius:24px !important; padding-bottom:1.75rem !important; }
-  .cx-title { color:#fff !important; font-weight:800 !important; }
-  .cx-text { color:#9ca3af !important; font-size:0.875rem !important; }
-  .cx-actions { gap:12px !important; }
-  .cx-btn { border-radius:12px !important; font-size:0.875rem !important; font-weight:600 !important; padding:11px 22px !important; box-shadow:none !important; transition:filter .15s !important; }
-  .cx-btn:hover { filter:brightness(1.1); }
-  .cx-btn-cancel { background:rgba(255,255,255,0.06) !important; color:#e5e7eb !important; }
-  .cx-btn-confirm-violet { background:linear-gradient(90deg,#7c3aed,#d946ef) !important; color:#fff !important; box-shadow:0 10px 25px -8px rgba(124,58,237,0.5) !important; }
-  .cx-btn-confirm-danger { background:linear-gradient(90deg,#dc2626,#e11d48) !important; color:#fff !important; box-shadow:0 10px 25px -8px rgba(220,38,38,0.5) !important; }
-`;
+// Tema SweetAlert supaya cocok dengan tampilan gelap
+const swalTheme = {
+  background: "#151D2E",
+  color: "#E8ECF4",
+  confirmButtonColor: "#F5B83D",
+  cancelButtonColor: "#2C3858",
+  customClass: { confirmButton: "!text-[#1A1305] !font-semibold" },
+};
 
-const deleteIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>
-    </svg>
-  </div>
-`;
+const notify = (icon, title, text, extra = {}) =>
+  Swal.fire({ ...swalTheme, icon, title, text, ...extra });
 
-const successIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20 6 9 17l-5-5"/>
-    </svg>
-  </div>
-`;
+const INPUT_CLASS =
+  "w-full rounded-lg border border-[#2C3858] bg-[#0F1626] px-3.5 py-2.5 text-sm text-[#E8ECF4] outline-none transition placeholder:text-[#5E6A87] [color-scheme:dark]";
+const INPUT_EDITABLE =
+  "focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 disabled:opacity-50";
+const INPUT_LOCKED = "cursor-not-allowed opacity-60";
 
-const errorIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M18 6 6 18M6 6l12 12"/>
-    </svg>
-  </div>
-`;
+const LABEL_CLASS = "mb-1.5 block text-sm font-medium";
 
-const warningIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
-    </svg>
-  </div>
-`;
-
-function injectSwalStyle() {
-  if (document.getElementById("cx-swal-style")) return;
-  const style = document.createElement("style");
-  style.id = "cx-swal-style";
-  style.innerHTML = SWAL_BASE_STYLE;
-  document.head.appendChild(style);
-}
+const ACTION_BTN =
+  "flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-white/[0.08] hover:text-[#F5B83D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D]";
 
 export default function ManageAdminPage() {
   const router = useRouter();
@@ -149,14 +132,7 @@ export default function ManageAdminPage() {
       setAdmins(res.data.data || []);
       setCurrentAdminId(res.data.currentAdminId ?? null);
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal memuat data</p><p class="cx-text">Data user tidak berhasil diambil dari server.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Mengerti",
-        didOpen: injectSwalStyle,
-      });
+      notify("error", "Gagal memuat data", "Data user tidak berhasil diambil dari server.");
     } finally {
       setLoading(false);
     }
@@ -201,38 +177,17 @@ export default function ManageAdminPage() {
 
   const validateForm = () => {
     if (!form.full_name.trim() || !form.email.trim()) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Data belum lengkap</p><p class="cx-text">Nama dan email wajib diisi.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Data belum lengkap", "Nama dan email wajib diisi.");
       return false;
     }
 
     if (!editId && !form.password.trim()) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Data belum lengkap</p><p class="cx-text">Password wajib diisi.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Data belum lengkap", "Kata sandi wajib diisi.");
       return false;
     }
 
     if (form.password && form.password.length < 6) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Password terlalu pendek</p><p class="cx-text">Minimal 6 karakter.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Kata sandi terlalu pendek", "Minimal 6 karakter.");
       return false;
     }
 
@@ -260,43 +215,28 @@ export default function ManageAdminPage() {
         await api.put(`/admins/${editId}`, payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        Swal.fire({
-          html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Berhasil diupdate</p><p class="cx-text">Data admin sudah tersimpan.</p>`,
-          background: "#141420",
-          buttonsStyling: false,
-          customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-          confirmButtonText: "Oke",
+        notify("success", "Berhasil diupdate", "Data admin sudah tersimpan.", {
           timer: 1800,
-          didOpen: injectSwalStyle,
+          showConfirmButton: false,
         });
       } else {
         await api.post("/admins", payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        Swal.fire({
-          html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Admin ditambahkan</p><p class="cx-text">Akun admin baru berhasil dibuat.</p>`,
-          background: "#141420",
-          buttonsStyling: false,
-          customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-          confirmButtonText: "Oke",
+        notify("success", "Admin ditambahkan", "Akun admin baru berhasil dibuat.", {
           timer: 1800,
-          didOpen: injectSwalStyle,
+          showConfirmButton: false,
         });
       }
 
       closeModal();
       await getAdmins();
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal menyimpan</p><p class="cx-text">${
-          err.response?.data?.message || "Terjadi kesalahan pada server."
-        }</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Mengerti",
-        didOpen: injectSwalStyle,
-      });
+      notify(
+        "error",
+        "Gagal menyimpan",
+        err.response?.data?.message || "Terjadi kesalahan pada server."
+      );
     } finally {
       setSaving(false);
     }
@@ -304,24 +244,16 @@ export default function ManageAdminPage() {
 
   const deleteAdmin = async (id) => {
     const result = await Swal.fire({
-      html: `
-        ${deleteIconHtml}
-        <p class="cx-title" style="font-size:1.25rem;margin-bottom:6px;">Hapus akun ini?</p>
-        <p class="cx-text">Akun yang dihapus tidak bisa login lagi.</p>
-      `,
+      ...swalTheme,
+      icon: "warning",
+      title: "Hapus akun ini?",
+      text: "Akun yang dihapus tidak bisa login lagi.",
       showCancelButton: true,
-      buttonsStyling: false,
       reverseButtons: true,
-      background: "#141420",
-      customClass: {
-        popup: "cx-popup",
-        actions: "cx-actions",
-        confirmButton: "cx-btn cx-btn-confirm-danger",
-        cancelButton: "cx-btn cx-btn-cancel",
-      },
-      confirmButtonText: "Ya, Hapus",
+      confirmButtonText: "Ya, hapus",
       cancelButtonText: "Batal",
-      didOpen: injectSwalStyle,
+      confirmButtonColor: "#DC2626",
+      customClass: {},
     });
 
     if (!result.isConfirmed) return;
@@ -334,27 +266,17 @@ export default function ManageAdminPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      Swal.fire({
-        html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Akun dihapus</p><p class="cx-text">Data berhasil dihapus dari sistem.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
+      notify("success", "Akun dihapus", "Data berhasil dihapus dari sistem.", {
         timer: 1800,
-        didOpen: injectSwalStyle,
+        showConfirmButton: false,
       });
       await getAdmins();
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal menghapus</p><p class="cx-text">${
-          err.response?.data?.message || "Terjadi kesalahan pada server."
-        }</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Mengerti",
-        didOpen: injectSwalStyle,
-      });
+      notify(
+        "error",
+        "Gagal menghapus",
+        err.response?.data?.message || "Terjadi kesalahan pada server."
+      );
     } finally {
       setDeletingId(null);
     }
@@ -370,35 +292,33 @@ export default function ManageAdminPage() {
     { href: "/manage-admin", icon: FaUserShield, label: "Manage Admin" },
   ];
 
+  const rootClass = `${display.variable} ${body.variable} font-[family-name:var(--font-body)]`;
+
   if (loading) {
     return (
-      <div className="h-screen flex flex-col justify-center items-center gap-5 bg-[#0b0b13] text-white">
-        <div className="relative">
-          <div className="w-12 h-12 border-[3px] border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-          <div className="absolute inset-0 w-12 h-12 border-[3px] border-transparent border-b-fuchsia-500/40 rounded-full animate-spin [animation-direction:reverse] [animation-duration:1.2s]" />
-        </div>
-        <p className="text-sm text-gray-500 tracking-wide">Memuat data akun...</p>
+      <div
+        className={`${rootClass} flex h-screen flex-col items-center justify-center gap-4 bg-[#0C1220] text-[#E8ECF4]`}
+      >
+        <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-[#F5B83D]/25 border-t-[#F5B83D] motion-reduce:animate-none" />
+        <p className="text-sm text-[#8B96AD]">Memuat data akun...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-[#0b0b13] text-white">
-      {/* SIDEBAR */}
-      <aside className="relative w-72 shrink-0 bg-[#0e0e16] border-r border-white/[0.06] flex flex-col">
-        <div className="pointer-events-none absolute -top-32 -left-32 w-80 h-80 rounded-full bg-violet-600/15 blur-[80px]" />
-        <div className="pointer-events-none absolute bottom-20 -left-20 w-60 h-60 rounded-full bg-fuchsia-600/10 blur-[60px]" />
-
-        <div className="p-7 border-b border-white/[0.06] relative">
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-600/40 rotate-3">
-              <FaTicketAlt size={16} className="text-white" />
-            </span>
-            Concert<span className="text-violet-400">X</span>
-          </h1>
+    <div
+      className={`${rootClass} flex min-h-screen bg-[#0C1220] text-[#E8ECF4] selection:bg-[#F5B83D] selection:text-[#1A1305]`}
+    >
+      {/* ================= SIDEBAR ================= */}
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/[0.06] bg-[#101727]">
+        <div className="flex items-center gap-2.5 px-7 py-7">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F5B83D] text-[#1A1305]">
+            <FaTicketAlt size={15} />
+          </span>
+          <span className={`${HD} text-xl font-bold tracking-tight`}>Lokatix</span>
         </div>
 
-        <nav className="p-4 space-y-1 relative flex-1">
+        <nav className="flex-1 space-y-0.5 px-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/manage-admin";
@@ -406,79 +326,79 @@ export default function ManageAdminPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative group w-full rounded-xl py-3 flex items-center gap-3.5 px-4 text-[13.5px] font-medium transition-all duration-200 ${
+                className={`relative flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D] ${
                   active
-                    ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-600/30"
-                    : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
+                    ? "bg-white/[0.07] text-white"
+                    : "text-[#8B96AD] hover:bg-white/[0.04] hover:text-white"
                 }`}
               >
                 {active && (
-                  <span className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-white" />
+                  <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#F5B83D]" />
                 )}
-                <Icon size={15} className={active ? "opacity-100" : "opacity-70 group-hover:opacity-100"} />
-                {item.label}
+                <Icon size={14} className={`shrink-0 ${active ? "text-[#F5B83D]" : ""}`} />
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 relative">
-          <div className="border-t border-dashed border-white/10 mb-4" />
+        <div className="p-4">
           <button
             onClick={logout}
-            className="w-full py-3 rounded-xl flex justify-center items-center gap-2.5 text-sm font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 transition-all duration-200"
+            className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-red-400/25 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
-            <FaSignOutAlt size={13} />
+            <FaSignOutAlt size={12} />
             Keluar
           </button>
         </div>
       </aside>
 
-      {/* CONTENT */}
-      <main className="flex-1 min-w-0 flex flex-col">
-        <header className="px-8 lg:px-10 py-6 flex flex-wrap justify-between items-center gap-4 border-b border-white/[0.06] bg-[#0b0b13]/80 backdrop-blur-xl sticky top-0 z-30">
+      {/* ================= CONTENT ================= */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0C1220]/85 px-10 py-6 backdrop-blur">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Manage Admin &amp; User</h1>
-            <p className="text-gray-500 mt-1 text-sm">
+            <h1 className={`${HD} text-3xl font-bold tracking-tight`}>Admin dan user</h1>
+            <p className="mt-1 text-sm text-[#8B96AD]">
               Kelola akun administrator dan pengguna yang terdaftar.
             </p>
           </div>
 
           <button
             onClick={openAddModal}
-            className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold transition-all shadow-lg shadow-violet-600/25 active:scale-[0.97]"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-[#F5B83D] px-5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30"
           >
-            <FaPlus size={12} />
-            Tambah Admin
+            <FaPlus size={11} />
+            Tambah admin
           </button>
         </header>
 
-        <div className="p-6 lg:p-10 space-y-6 flex-1">
-          {/* SEARCH BAR */}
-          <div className="bg-[#141420] rounded-2xl border border-white/[0.06] p-4">
+        <div className="flex-1 space-y-6 p-10">
+          {/* ===== SEARCH ===== */}
+          <section className="rounded-2xl bg-[#151D2E] p-5 ring-1 ring-white/[0.06]">
             <div className="relative max-w-md">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm" />
+              <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
               <input
                 type="text"
-                placeholder="Cari nama atau email..."
+                placeholder="Cari nama atau email"
+                aria-label="Cari nama atau email"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-white/[0.04] border border-white/10 rounded-xl pl-11 pr-4 py-2.5 w-full text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 placeholder:text-gray-500 transition"
+                className="h-11 w-full rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-4 text-sm outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15"
               />
             </div>
-          </div>
+          </section>
 
-          {/* TABLE */}
-          <div className="bg-[#141420] rounded-2xl border border-white/[0.06] overflow-hidden shadow-xl shadow-black/20">
+          {/* ===== TABEL ===== */}
+          <section className="overflow-hidden rounded-2xl bg-[#151D2E] ring-1 ring-white/[0.06]">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[760px]">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-gray-500 text-[11px] uppercase tracking-wider">
-                    <th className="text-left py-4 px-6 font-semibold">Nama</th>
-                    <th className="text-left font-semibold">Email</th>
-                    <th className="text-left font-semibold">Role</th>
-                    <th className="text-left font-semibold">Bergabung</th>
-                    <th className="text-center pr-6 font-semibold">Aksi</th>
+                  <tr className="border-b border-white/[0.06] text-xs text-[#5E6A87]">
+                    <th className="px-6 py-4 text-left font-medium">Nama</th>
+                    <th className="text-left font-medium">Email</th>
+                    <th className="text-left font-medium">Role</th>
+                    <th className="text-left font-medium">Bergabung</th>
+                    <th className="pr-6 text-center font-medium">Aksi</th>
                   </tr>
                 </thead>
 
@@ -486,17 +406,15 @@ export default function ManageAdminPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-20">
-                        <div className="flex flex-col items-center text-center px-4">
-                          <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-4">
-                            <FaUserShield className="text-gray-600" size={28} />
-                          </div>
-                          <p className="text-base font-semibold text-gray-300">
+                        <div className="flex flex-col items-center px-4 text-center">
+                          <FaUserShield className="mb-3 text-[#5E6A87]" size={28} />
+                          <p className="text-sm font-semibold">
                             {search ? "Tidak ada akun yang cocok" : "Belum ada data akun"}
                           </p>
-                          <p className="text-sm text-gray-500 mt-1.5 max-w-xs">
+                          <p className="mt-1 max-w-xs text-xs text-[#8B96AD]">
                             {search
                               ? "Coba ubah kata kunci pencarian."
-                              : 'Klik tombol "Tambah Admin" untuk membuat akun admin pertama.'}
+                              : 'Klik "Tambah admin" untuk membuat akun admin pertama.'}
                           </p>
                         </div>
                       </td>
@@ -510,27 +428,27 @@ export default function ManageAdminPage() {
                       return (
                         <tr
                           key={item.id}
-                          className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group"
+                          className="border-b border-white/[0.06] transition-colors last:border-0 hover:bg-white/[0.03]"
                         >
-                          <td className="py-4 px-6">
+                          <td className="px-6 py-4">
                             <div className="flex items-center gap-3.5">
                               {item.avatar ? (
                                 <img
                                   src={getAvatarUrl(item.avatar)}
                                   alt={item.full_name}
-                                  className="w-11 h-11 rounded-full object-cover shrink-0 ring-2 ring-white/10"
+                                  className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/10"
                                 />
                               ) : (
                                 <div
-                                  className={`w-11 h-11 rounded-full bg-gradient-to-br ${avatarStyle} shrink-0 flex items-center justify-center text-xs font-bold ring-2 ring-white/10`}
+                                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-bold ${avatarStyle}`}
                                 >
                                   {getInitials(item.full_name)}
                                 </div>
                               )}
-                              <p className="font-semibold text-[13.5px] flex items-center gap-2">
+                              <p className="flex items-center gap-2 font-semibold">
                                 {item.full_name}
                                 {isSelf && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                                  <span className="rounded-full bg-[#F5B83D]/15 px-2 py-0.5 text-[11px] font-semibold text-[#F5B83D]">
                                     Kamu
                                   </span>
                                 )}
@@ -538,21 +456,21 @@ export default function ManageAdminPage() {
                             </div>
                           </td>
 
-                          <td className="text-gray-400 text-[13px]">{item.email}</td>
+                          <td className="text-[#C9D1E3]">{item.email}</td>
 
                           <td>
                             <span
-                              className={`inline-flex px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase border ${
+                              className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium capitalize ${
                                 isAdmin
-                                  ? "bg-violet-500/15 text-violet-300 border-violet-500/20"
-                                  : "bg-sky-500/15 text-sky-400 border-sky-500/20"
+                                  ? "bg-[#F5B83D]/10 text-[#F5B83D]"
+                                  : "bg-white/[0.06] text-[#C9D1E3]"
                               }`}
                             >
                               {item.role}
                             </span>
                           </td>
 
-                          <td className="text-gray-500 text-[13px]">
+                          <td className="text-[#8B96AD]">
                             {item.created_at
                               ? new Date(item.created_at).toLocaleDateString("id-ID", {
                                   day: "numeric",
@@ -563,22 +481,24 @@ export default function ManageAdminPage() {
                           </td>
 
                           <td className="pr-6">
-                            <div className="flex justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                            <div className="flex justify-center gap-1">
                               <button
                                 onClick={() => openEditModal(item)}
-                                className="w-8.5 h-8.5 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white transition"
-                                title="Edit"
+                                className={ACTION_BTN}
+                                title={isAdmin ? "Edit" : "Lihat detail"}
+                                aria-label={`${isAdmin ? "Edit" : "Lihat detail"} ${item.full_name}`}
                               >
-                                <FaEdit size={13} />
+                                <FaEdit size={14} />
                               </button>
 
                               <button
                                 onClick={() => deleteAdmin(item.id)}
                                 disabled={deletingId === item.id || isSelf}
                                 title={isSelf ? "Tidak bisa hapus akun sendiri" : "Hapus"}
-                                className="w-8.5 h-8.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-red-400 transition"
+                                aria-label={`Hapus ${item.full_name}`}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-red-400/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#8B96AD]"
                               >
-                                <FaTrash size={13} />
+                                <FaTrash size={14} />
                               </button>
                             </div>
                           </td>
@@ -589,56 +509,57 @@ export default function ManageAdminPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* MODAL */}
+        {/* ===== MODAL ===== */}
         {showModal && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget && !saving) closeModal();
             }}
           >
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+            <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
 
-            <div className="relative w-full max-w-[500px] bg-[#141420] border border-white/10 rounded-3xl shadow-2xl shadow-black/50 overflow-hidden">
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-violet-600" />
-
-              <div className="flex items-center justify-between px-7 pt-6 pb-2">
+            <div className="relative max-h-[90vh] w-full max-w-[500px] overflow-y-auto rounded-2xl border border-[#2C3858] bg-[#151D2E] shadow-2xl shadow-black/60">
+              <div className="flex items-start justify-between px-7 pb-2 pt-7">
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                    {viewOnly ? "Detail User" : editId ? "Edit Admin" : "Tambah Admin Baru"}
-                    {viewOnly && <FaLock size={13} className="text-gray-500" />}
+                  <h2 className={`${HD} flex items-center gap-2 text-2xl font-bold tracking-tight`}>
+                    {viewOnly ? "Detail user" : editId ? "Edit admin" : "Tambah admin"}
+                    {viewOnly && <FaLock size={13} className="text-[#5E6A87]" />}
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="mt-1 text-sm text-[#8B96AD]">
                     {viewOnly
-                      ? "Akun user tidak bisa diedit dari sini, hanya bisa dihapus"
+                      ? "Akun user tidak bisa diedit dari sini, hanya bisa dihapus."
                       : editId
-                      ? "Perbarui data admin"
-                      : "Daftarkan admin baru untuk mengelola sistem"}
+                      ? "Perbarui data admin."
+                      : "Daftarkan admin baru untuk mengelola sistem."}
                   </p>
                 </div>
                 <button
                   onClick={closeModal}
                   disabled={saving}
-                  className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition disabled:opacity-40"
+                  aria-label="Tutup"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
                 >
                   <FaTimes size={14} />
                 </button>
               </div>
 
-              <div className="px-7 py-5 space-y-4">
+              <div className="space-y-4 px-7 py-5">
                 {viewOnly && (
-                  <div className="flex justify-center mb-1">
+                  <div className="mb-1 flex justify-center">
                     {form.avatar ? (
                       <img
                         src={getAvatarUrl(form.avatar)}
                         alt={form.full_name}
-                        className="w-20 h-20 rounded-full object-cover ring-2 ring-white/10"
+                        className="h-20 w-20 rounded-full object-cover ring-1 ring-white/10"
                       />
                     ) : (
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-lg font-bold ring-2 ring-white/10">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#2D4A5E] text-lg font-bold text-[#7DD3FC]">
                         {getInitials(form.full_name)}
                       </div>
                     )}
@@ -646,75 +567,71 @@ export default function ManageAdminPage() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
-                    Nama Lengkap {!viewOnly && <span className="text-red-400">*</span>}
+                  <label htmlFor="full_name" className={LABEL_CLASS}>
+                    Nama lengkap {!viewOnly && <span className="text-red-300">*</span>}
                   </label>
                   <input
+                    id="full_name"
                     type="text"
                     name="full_name"
-                    placeholder="Nama Lengkap"
+                    placeholder="Nama lengkap"
                     value={form.full_name}
                     onChange={handleChange}
                     readOnly={viewOnly}
-                    className={`w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none placeholder:text-gray-600 transition ${
-                      viewOnly
-                        ? "opacity-60 cursor-not-allowed"
-                        : "focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
-                    }`}
+                    className={`${INPUT_CLASS} ${viewOnly ? INPUT_LOCKED : INPUT_EDITABLE}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
-                    Email {!viewOnly && <span className="text-red-400">*</span>}
+                  <label htmlFor="email" className={LABEL_CLASS}>
+                    Email {!viewOnly && <span className="text-red-300">*</span>}
                   </label>
                   <input
+                    id="email"
                     type="email"
                     name="email"
-                    placeholder="Email"
+                    placeholder="nama@email.com"
                     value={form.email}
                     onChange={handleChange}
                     readOnly={viewOnly}
-                    className={`w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none placeholder:text-gray-600 transition ${
-                      viewOnly
-                        ? "opacity-60 cursor-not-allowed"
-                        : "focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
-                    }`}
+                    className={`${INPUT_CLASS} ${viewOnly ? INPUT_LOCKED : INPUT_EDITABLE}`}
                   />
                 </div>
 
                 {!viewOnly && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
-                      Password {!editId && <span className="text-red-400">*</span>}
+                    <label htmlFor="password" className={LABEL_CLASS}>
+                      Kata sandi {!editId && <span className="text-red-300">*</span>}
                     </label>
                     <input
+                      id="password"
                       type="password"
                       name="password"
+                      autoComplete="new-password"
                       placeholder={
                         editId
-                          ? "Password baru (kosongkan jika tidak diganti)"
+                          ? "Kata sandi baru (kosongkan jika tidak diganti)"
                           : "Minimal 6 karakter"
                       }
                       value={form.password}
                       onChange={handleChange}
                       disabled={saving}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 placeholder:text-gray-600 transition disabled:opacity-50"
+                      className={`${INPUT_CLASS} ${INPUT_EDITABLE}`}
                     />
                     {editId && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        Biarkan kosong kalau tidak ingin mengganti password.
+                      <p className="mt-2 text-xs text-[#8B96AD]">
+                        Biarkan kosong kalau tidak ingin mengganti kata sandi.
                       </p>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="px-7 py-5 border-t border-white/[0.06] bg-white/[0.02] flex justify-end gap-3">
+              <div className="flex justify-end gap-3 border-t border-white/[0.06] px-7 py-5">
                 <button
                   onClick={closeModal}
                   disabled={saving}
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium bg-white/5 hover:bg-white/10 text-gray-300 transition disabled:opacity-50"
+                  className="rounded-lg border border-[#2C3858] px-5 py-2.5 text-sm font-medium text-[#C9D1E3] transition hover:bg-white/[0.05] disabled:opacity-50"
                 >
                   {viewOnly ? "Tutup" : "Batal"}
                 </button>
@@ -723,17 +640,17 @@ export default function ManageAdminPage() {
                   <button
                     onClick={saveAdmin}
                     disabled={saving}
-                    className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 shadow-lg shadow-violet-600/25 transition-all disabled:opacity-60 flex items-center gap-2 min-w-[120px] justify-center"
+                    className="flex min-w-[130px] items-center justify-center gap-2 rounded-lg bg-[#F5B83D] px-5 py-2.5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30 disabled:opacity-60"
                   >
                     {saving ? (
                       <>
-                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#1A1305]/25 border-t-[#1A1305] motion-reduce:animate-none" />
                         Menyimpan
                       </>
                     ) : editId ? (
-                      "Simpan Perubahan"
+                      "Simpan perubahan"
                     ) : (
-                      "Tambah Admin"
+                      "Tambah admin"
                     )}
                   </button>
                 )}

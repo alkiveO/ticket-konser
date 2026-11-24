@@ -1,3 +1,4 @@
+
 const db = require("../config/database");
 
 const getPrefixesByTicketCategory = async (ticket_category_id) => {
@@ -38,7 +39,6 @@ const removePrefix = async (id) => {
 };
 
 const bulkCreateSeats = async (seatRows) => {
-  // seatRows = [[ticket_category_id, seat_prefix_id, code, 'available'], ...]
   const [result] = await db.query(
     `
     INSERT INTO seats
@@ -73,6 +73,22 @@ const getSeatsByTicketCategory = async (ticket_category_id) => {
   return rows;
 };
 
+// USER: ambil foto denah berdasarkan concert
+const getConcertSeatMap = async (concert_id) => {
+  const [rows] = await db.query(
+    `
+    SELECT seat_map
+    FROM concerts
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [concert_id]
+  );
+
+  return rows[0] || null;
+};
+
+// USER: ambil semua kursi dalam 1 concert
 const getSeatsByConcert = async (concert_id) => {
   const [rows] = await db.query(
     `
@@ -83,6 +99,7 @@ const getSeatsByConcert = async (concert_id) => {
       seats.id AS seat_id,
       seats.code,
       seats.status,
+      seat_prefixes.id AS seat_prefix_id,
       seat_prefixes.prefix
     FROM ticket_categories
     JOIN seats
@@ -132,24 +149,36 @@ const getPrefixById = async (id) => {
     `SELECT * FROM seat_prefixes WHERE id = ?`,
     [id]
   );
+
   return rows[0];
 };
 
 const getSeatsByPrefixId = async (seat_prefix_id) => {
   const [rows] = await db.query(
-    `SELECT id, code, status FROM seats WHERE seat_prefix_id = ? ORDER BY id ASC`,
+    `
+    SELECT id, code, status
+    FROM seats
+    WHERE seat_prefix_id = ?
+    ORDER BY id ASC
+    `,
     [seat_prefix_id]
   );
+
   return rows;
 };
 
 const updatePrefixPosition = async (id, { pos_x, pos_y }) => {
   await db.query(
-    `UPDATE seat_prefixes SET pos_x = ?, pos_y = ? WHERE id = ?`,
+    `
+    UPDATE seat_prefixes
+    SET pos_x = ?, pos_y = ?
+    WHERE id = ?
+    `,
     [pos_x, pos_y, id]
   );
 };
 
+// ADMIN/USER: ambil posisi semua prefix dalam denah concert
 const getPrefixesWithPosition = async (concert_id) => {
   const [rows] = await db.query(
     `
@@ -162,11 +191,14 @@ const getPrefixesWithPosition = async (concert_id) => {
       ticket_categories.id AS ticket_category_id,
       ticket_categories.name AS category_name
     FROM seat_prefixes
-    JOIN ticket_categories ON ticket_categories.id = seat_prefixes.ticket_category_id
+    JOIN ticket_categories
+      ON ticket_categories.id = seat_prefixes.ticket_category_id
     WHERE ticket_categories.concert_id = ?
+    ORDER BY ticket_categories.id ASC, seat_prefixes.prefix ASC
     `,
     [concert_id]
   );
+
   return rows;
 };
 
@@ -176,6 +208,7 @@ module.exports = {
   removePrefix,
   bulkCreateSeats,
   getSeatsByTicketCategory,
+  getConcertSeatMap,
   getSeatsByConcert,
   getSeatsByIds,
   updateSeatsStatus,

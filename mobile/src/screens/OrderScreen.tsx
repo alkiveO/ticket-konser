@@ -8,15 +8,20 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { useTheme, themes } from "../context/ThemeContext";
 
 const API_URL = "http://localhost:3000/api";
 
-const MAX_TICKETS_PER_CONCERT = 10;
+const PURPLE = "#a855f7";
+const PURPLE_DARK = "#7c3aed";
+const ANDROID_TOP = Platform.OS === "android" ? StatusBar.currentHeight || 0 : 0;
 
 type TicketCategory = {
   id: string | number;
@@ -33,11 +38,33 @@ type SelectedTicket = {
   qty: number;
 };
 
-const BADGE_STYLE: Record<string, { bg: string; text: string; icon: any }> = {
-  PREMIUM: { bg: "#3f2d0d", text: "#fbbf24", icon: "diamond" },
-  TERLARIS: { bg: "#3b1f66", text: "#c4b5fd", icon: "flame" },
-  REGULER: { bg: "#1f2937", text: "#9ca3af", icon: "ticket" },
+type BadgeStyle = {
+  bg: string;
+  text: string;
+  icon: any;
+  accent: [string, string];
 };
+
+const getBadgeStyles = (isDark: boolean): Record<string, BadgeStyle> => ({
+  PREMIUM: {
+    bg: isDark ? "rgba(245,158,11,0.16)" : "rgba(245,158,11,0.18)",
+    text: isDark ? "#fbbf24" : "#b45309",
+    icon: "diamond",
+    accent: ["#fbbf24", "#f59e0b"],
+  },
+  TERLARIS: {
+    bg: isDark ? "rgba(168,85,247,0.18)" : "rgba(168,85,247,0.14)",
+    text: isDark ? "#c4b5fd" : "#6d28d9",
+    icon: "flame",
+    accent: ["#c084fc", "#7c3aed"],
+  },
+  REGULER: {
+    bg: isDark ? "rgba(107,114,128,0.2)" : "rgba(107,114,128,0.14)",
+    text: isDark ? "#9ca3af" : "#4b5563",
+    icon: "ticket",
+    accent: ["#9ca3af", "#6b7280"],
+  },
+});
 
 const getBadgeLabel = (item: TicketCategory, index: number) => {
   if (item.badge) return String(item.badge).toUpperCase();
@@ -52,6 +79,10 @@ const keyOf = (id: string | number) => String(id);
 
 export default function OrderScreen({ navigation, route }: any) {
   const { concertId, ticketCategoryId } = route.params;
+  const { colors } = useTheme();
+  const isDark = colors.statusBar === "light";
+  const styles = createStyles(colors, isDark);
+  const BADGES = getBadgeStyles(isDark);
 
   const [concert, setConcert] = useState<any>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -101,19 +132,7 @@ export default function OrderScreen({ navigation, route }: any) {
     setQuantities((prev) => {
       const key = keyOf(item.id);
       const current = prev[key] || 0;
-
       if (current >= item.remaining_quota) return prev;
-
-      // Cap total tiket yang lagi dipilih (semua kategori) di 1 checkout ini
-      const totalNow = Object.values(prev).reduce((sum, q) => sum + q, 0);
-      if (totalNow >= MAX_TICKETS_PER_CONCERT) {
-        Alert.alert(
-          "Batas Maksimal",
-          `Maksimal ${MAX_TICKETS_PER_CONCERT} tiket per akun untuk concert ini`
-        );
-        return prev;
-      }
-
       return { ...prev, [key]: current + 1 };
     });
   };
@@ -141,6 +160,8 @@ export default function OrderScreen({ navigation, route }: any) {
       ),
     [selectedItems]
   );
+
+  const formatPrice = (price: number) => Number(price).toLocaleString("id-ID");
 
   const checkout = async () => {
     if (totalTickets === 0) return;
@@ -185,37 +206,60 @@ export default function OrderScreen({ navigation, route }: any) {
     }
   };
 
+  /* ---------------- LOADING ---------------- */
   if (loading) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#000",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <ActivityIndicator size="large" color="#a855f7" />
+      <View style={styles.loadingRoot}>
+        <StatusBar
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor={colors.background}
+        />
+        <LinearGradient
+          colors={["rgba(168,85,247,0.25)", "rgba(124,58,237,0.08)"]}
+          style={styles.loadingIcon}
+        >
+          <Ionicons name="ticket" size={28} color={PURPLE} />
+        </LinearGradient>
+        <ActivityIndicator
+          size="small"
+          color={PURPLE}
+          style={{ marginTop: 20 }}
+        />
+        <Text style={styles.loadingText}>Memuat kategori tiket...</Text>
       </View>
     );
   }
 
+  const disabledCheckout = checkoutLoading || totalTickets === 0;
+
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={["#000", "#0a0a0f", "#000"]}
-        style={StyleSheet.absoluteFillObject}
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
       />
 
       <SafeAreaView style={styles.safe}>
+        {/* ================= HEADER ================= */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" color="#fff" size={22} />
+          <TouchableOpacity
+            style={styles.back}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="chevron-back" color={colors.text} size={22} />
           </TouchableOpacity>
 
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.title}>Pilih Kategori Tiket</Text>
-            <Text style={styles.subtitle}>{concert.title}</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {concert.title}
+            </Text>
+          </View>
+
+          <View style={styles.headerCount}>
+            <Ionicons name="ticket-outline" size={13} color={PURPLE} />
+            <Text style={styles.headerCountText}>{totalTickets}</Text>
           </View>
         </View>
 
@@ -223,109 +267,217 @@ export default function OrderScreen({ navigation, route }: any) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
+          {/* ================= TICKET LIST ================= */}
           {concert.ticket_categories.map((item: TicketCategory, index: number) => {
             const qty = quantities[keyOf(item.id)] || 0;
             const badgeLabel = getBadgeLabel(item, index);
-            const badgeStyle = BADGE_STYLE[badgeLabel] || BADGE_STYLE.REGULER;
+            const badgeStyle = BADGES[badgeLabel] || BADGES.REGULER;
             const benefits: string[] = item.benefits || [];
             const isActive = qty > 0;
+
+            const soldOut = item.remaining_quota <= 0;
+            const almostSoldOut =
+              item.remaining_quota > 0 && item.remaining_quota <= 10;
+            const maxReached = qty >= item.remaining_quota;
+
+            const stockColor = soldOut
+              ? colors.subText
+              : almostSoldOut
+              ? "#f59e0b"
+              : PURPLE;
 
             return (
               <View
                 key={item.id}
-                style={[styles.ticketCard, isActive && styles.ticketCardActive]}
+                style={[
+                  styles.ticketCard,
+                  isActive && styles.ticketCardActive,
+                  soldOut && styles.ticketCardSoldOut,
+                ]}
               >
+                {/* aksen kiri */}
+                <LinearGradient
+                  colors={soldOut ? [colors.border, colors.border] : badgeStyle.accent}
+                  style={styles.ticketAccent}
+                />
+
                 {isActive && (
                   <View style={styles.selectedTag}>
-                    <Ionicons name="checkmark" size={12} color="#fff" />
+                    <Ionicons name="checkmark" size={13} color="#ffffff" />
                   </View>
                 )}
 
-                <View style={styles.cardTopRow}>
-                  <View style={[styles.badge, { backgroundColor: badgeStyle.bg }]}>
-                    <Ionicons name={badgeStyle.icon} size={11} color={badgeStyle.text} />
-                    <Text style={[styles.badgeText, { color: badgeStyle.text }]}>
-                      {badgeLabel}
+                <View style={styles.ticketBody}>
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.badge, { backgroundColor: badgeStyle.bg }]}>
+                      <Ionicons name={badgeStyle.icon} size={11} color={badgeStyle.text} />
+                      <Text style={[styles.badgeText, { color: badgeStyle.text }]}>
+                        {badgeLabel}
+                      </Text>
+                    </View>
+
+                    <View style={styles.typePill}>
+                      <Ionicons
+                        name={item.seat_type === "seated" ? "grid-outline" : "walk-outline"}
+                        size={11}
+                        color={colors.subText}
+                      />
+                      <Text style={styles.typePillText}>
+                        {item.seat_type === "seated" ? "Bernomor kursi" : "Standing"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.ticketName}>{item.name}</Text>
+
+                  <View style={styles.stockRow}>
+                    <Ionicons
+                      name={soldOut ? "close-circle" : "ticket-outline"}
+                      size={13}
+                      color={stockColor}
+                    />
+                    <Text
+                      style={[
+                        styles.remaining,
+                        almostSoldOut && styles.remainingWarn,
+                        soldOut && styles.remainingSoldOut,
+                      ]}
+                    >
+                      {soldOut
+                        ? "Tiket habis"
+                        : almostSoldOut
+                        ? `Tinggal ${item.remaining_quota} tiket lagi!`
+                        : `Sisa ${item.remaining_quota} tiket lagi`}
                     </Text>
                   </View>
 
-                  <Text style={styles.price}>
-                    IDR {item.price.toLocaleString("id-ID")}
-                  </Text>
-                </View>
+                  {benefits.length > 0 && (
+                    <View style={styles.benefitList}>
+                      {benefits.map((benefit: string, i: number) => (
+                        <View key={i} style={styles.benefitRow}>
+                          <Ionicons
+                            name="shield-checkmark"
+                            size={14}
+                            color={isDark ? "#a78bfa" : PURPLE_DARK}
+                          />
+                          <Text style={styles.benefitText}>{benefit}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
 
-                <Text style={styles.ticketName}>{item.name}</Text>
-                <Text style={styles.remaining}>
-                  Sisa {item.remaining_quota} tiket lagi
-                </Text>
+                  <View style={styles.dashed} />
 
-                {benefits.length > 0 && (
-                  <View style={styles.benefitList}>
-                    {benefits.map((benefit: string, i: number) => (
-                      <View key={i} style={styles.benefitRow}>
-                        <Ionicons name="shield-checkmark" size={14} color="#a78bfa" />
-                        <Text style={styles.benefitText}>{benefit}</Text>
+                  <View style={styles.cardBottomRow}>
+                    <View>
+                      <Text style={styles.priceLabel}>Harga / tiket</Text>
+                      <Text style={styles.price}>IDR {formatPrice(item.price)}</Text>
+                    </View>
+
+                    {soldOut ? (
+                      <View style={styles.soldOutPill}>
+                        <Text style={styles.soldOutPillText}>Habis</Text>
                       </View>
-                    ))}
+                    ) : (
+                      <View style={styles.qtyRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.qtyBtn,
+                            styles.qtyBtnMinus,
+                            qty === 0 && styles.qtyBtnDisabled,
+                          ]}
+                          disabled={qty === 0}
+                          activeOpacity={0.7}
+                          onPress={() => decrease(item)}
+                        >
+                          <Ionicons name="remove" size={18} color={colors.text} />
+                        </TouchableOpacity>
+
+                        <Text style={styles.qty}>{qty}</Text>
+
+                        <TouchableOpacity
+                          disabled={maxReached}
+                          activeOpacity={0.8}
+                          onPress={() => increase(item)}
+                        >
+                          <LinearGradient
+                            colors={
+                              maxReached
+                                ? [colors.border, colors.border]
+                                : [PURPLE, PURPLE_DARK]
+                            }
+                            style={styles.qtyBtn}
+                          >
+                            <Ionicons
+                              name="add"
+                              size={18}
+                              color={maxReached ? colors.subText : "#ffffff"}
+                            />
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
-                )}
-
-                <View style={styles.qtyRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.qtyBtn,
-                      styles.qtyBtnMinus,
-                      qty === 0 && styles.qtyBtnDisabled,
-                    ]}
-                    disabled={qty === 0}
-                    onPress={() => decrease(item)}
-                  >
-                    <Ionicons name="remove" size={18} color="#9ca3af" />
-                  </TouchableOpacity>
-
-                  <Text style={styles.qty}>{qty}</Text>
-
-                  <TouchableOpacity
-                    disabled={qty >= item.remaining_quota}
-                    onPress={() => increase(item)}
-                  >
-                    <LinearGradient
-                      colors={
-                        qty >= item.remaining_quota
-                          ? ["#33333d", "#33333d"]
-                          : ["#a855f7", "#7c3aed"]
-                      }
-                      style={styles.qtyBtn}
-                    >
-                      <Ionicons name="add" size={18} color="#fff" />
-                    </LinearGradient>
-                  </TouchableOpacity>
                 </View>
               </View>
             );
           })}
+
+          <View style={{ height: 120 }} />
         </ScrollView>
 
-        <LinearGradient colors={["transparent", "#0b0b13"]} style={styles.bottomBarWrap}>
+        {/* ================= BOTTOM BAR ================= */}
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(11,11,19,0)", "#0b0b13"]
+              : ["rgba(255,255,255,0)", colors.card]
+          }
+          style={styles.bottomBarWrap}
+          pointerEvents="box-none"
+        >
           <View style={styles.bottomBar}>
-            <View>
+            <View style={styles.bottomInfo}>
               <Text style={styles.totalLabel}>Total ({totalTickets} Tiket)</Text>
-              <Text style={styles.totalPrice}>
-                IDR {totalPrice.toLocaleString("id-ID")}
-              </Text>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalCurrency}>IDR</Text>
+                <Text style={styles.totalPrice}>{formatPrice(totalPrice)}</Text>
+              </View>
             </View>
 
-            <TouchableOpacity disabled={checkoutLoading || totalTickets === 0} onPress={checkout}>
+            <TouchableOpacity
+              disabled={disabledCheckout}
+              onPress={checkout}
+              activeOpacity={0.85}
+            >
               <LinearGradient
-                colors={["#a855f7", "#7c3aed"]}
-                style={[styles.lanjutBtn, totalTickets === 0 && styles.lanjutBtnDisabled]}
+                colors={
+                  disabledCheckout && !checkoutLoading
+                    ? [colors.border, colors.border]
+                    : [PURPLE, PURPLE_DARK]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[styles.lanjutBtn, !disabledCheckout && styles.lanjutBtnActive]}
               >
                 {checkoutLoading ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color="#ffffff" />
                 ) : (
                   <>
-                    <Text style={styles.lanjutText}>Lanjut</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
+                    <Text
+                      style={[
+                        styles.lanjutText,
+                        disabledCheckout && { color: colors.subText },
+                      ]}
+                    >
+                      Lanjut
+                    </Text>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={16}
+                      color={disabledCheckout ? colors.subText : "#ffffff"}
+                      style={{ marginLeft: 6 }}
+                    />
                   </>
                 )}
               </LinearGradient>
@@ -337,118 +489,314 @@ export default function OrderScreen({ navigation, route }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#000" },
-  safe: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
-  back: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#141420",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  title: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  subtitle: { color: "#6b7280", fontSize: 13, marginTop: 2 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  ticketCard: {
-    backgroundColor: "#141420",
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  ticketCardActive: {
-    borderColor: "#7c3aed",
-    backgroundColor: "#1a1330",
-    shadowColor: "#7c3aed",
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-  selectedTag: {
-    position: "absolute",
-    top: -8,
-    right: -8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#7c3aed",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2,
-  },
-  cardTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3, marginLeft: 4 },
-  price: { color: "#a78bfa", fontSize: 15, fontWeight: "800", textAlign: "right" },
-  ticketName: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
-  remaining: { color: "#6b7280", fontSize: 13, marginBottom: 12 },
-  benefitList: { marginBottom: 14 },
-  benefitRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-  benefitText: { color: "#9ca3af", fontSize: 13, marginLeft: 8 },
-  qtyRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
-  qtyBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qtyBtnMinus: {
-    backgroundColor: "#1f1f28",
-    borderWidth: 1,
-    borderColor: "#33333d",
-    marginRight: 18,
-  },
-  qtyBtnDisabled: { opacity: 0.4 },
-  qty: { color: "#fff", fontSize: 16, fontWeight: "700", minWidth: 16, textAlign: "center" },
-  bottomBarWrap: { paddingTop: 20 },
-  bottomBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    borderTopWidth: 1,
-    borderTopColor: "#1f1f28",
-  },
-  totalLabel: { color: "#6b7280", fontSize: 12, marginBottom: 2 },
-  totalPrice: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  lanjutBtn: {
-    flexDirection: "row",
-    borderRadius: 30,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#a855f7",
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  lanjutBtnDisabled: { opacity: 0.4 },
-  lanjutText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-});
+/* ========================================= */
+/* STYLES */
+/* ========================================= */
+
+const createStyles = (colors: typeof themes.dark, isDark: boolean) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    safe: { flex: 1, paddingTop: ANDROID_TOP },
+
+    /* ---------- LOADING ---------- */
+    loadingRoot: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingIcon: {
+      width: 66,
+      height: 66,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: "rgba(168,85,247,0.25)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    loadingText: {
+      color: colors.subText,
+      fontSize: 13,
+      marginTop: 10,
+    },
+
+    /* ---------- HEADER ---------- */
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 18,
+    },
+    back: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 14,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 21,
+      fontWeight: "800",
+      letterSpacing: -0.3,
+    },
+    subtitle: {
+      color: colors.subText,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    headerCount: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "rgba(168,85,247,0.12)",
+      borderRadius: 11,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      marginLeft: 10,
+    },
+    headerCountText: {
+      color: PURPLE,
+      fontSize: 12,
+      fontWeight: "800",
+      marginLeft: 5,
+    },
+
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
+
+    /* ---------- TICKET CARD ---------- */
+    ticketCard: {
+      flexDirection: "row",
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      marginBottom: 16,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    ticketCardActive: {
+      borderColor: PURPLE_DARK,
+      backgroundColor: isDark ? "#1a1330" : "#f5f0ff",
+      shadowColor: PURPLE_DARK,
+      shadowOpacity: isDark ? 0.3 : 0.18,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 5,
+    },
+    ticketCardSoldOut: {
+      opacity: 0.6,
+    },
+    ticketAccent: {
+      width: 6,
+      borderTopLeftRadius: 20,
+      borderBottomLeftRadius: 20,
+    },
+    ticketBody: {
+      flex: 1,
+      padding: 16,
+    },
+    selectedTag: {
+      position: "absolute",
+      top: -9,
+      right: -9,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: PURPLE_DARK,
+      borderWidth: 2,
+      borderColor: colors.background,
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 2,
+    },
+    cardTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 10,
+    },
+    badge: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    badgeText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+      marginLeft: 4,
+    },
+    typePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    typePillText: {
+      color: colors.subText,
+      fontSize: 10,
+      fontWeight: "600",
+      marginLeft: 4,
+    },
+    ticketName: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "800",
+      marginBottom: 6,
+    },
+    stockRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    remaining: {
+      color: colors.subText,
+      fontSize: 12,
+      marginLeft: 5,
+    },
+    remainingWarn: {
+      color: "#f59e0b",
+      fontWeight: "700",
+    },
+    remainingSoldOut: {
+      color: colors.subText,
+    },
+    benefitList: { marginBottom: 4 },
+    benefitRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 7,
+    },
+    benefitText: {
+      color: colors.subText,
+      fontSize: 13,
+      marginLeft: 8,
+      flex: 1,
+    },
+    dashed: {
+      height: 1,
+      marginVertical: 14,
+      borderTopWidth: 1,
+      borderStyle: "dashed",
+      borderColor: colors.border,
+    },
+    cardBottomRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    priceLabel: {
+      color: colors.subText,
+      fontSize: 10,
+      marginBottom: 2,
+    },
+    price: {
+      color: isDark ? "#a78bfa" : PURPLE_DARK,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    /* ---------- QTY ---------- */
+    qtyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    qtyBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    qtyBtnMinus: {
+      backgroundColor: isDark ? "#1f1f28" : "#f4f4f8",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    qtyBtnDisabled: { opacity: 0.4 },
+    qty: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: "800",
+      minWidth: 38,
+      textAlign: "center",
+    },
+    soldOutPill: {
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: 12,
+      backgroundColor: colors.border,
+    },
+    soldOutPillText: {
+      color: colors.subText,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    /* ---------- BOTTOM BAR ---------- */
+    bottomBarWrap: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingTop: 24,
+    },
+    bottomBar: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingTop: 14,
+      paddingBottom: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    bottomInfo: { flex: 1, paddingRight: 12 },
+    totalLabel: {
+      color: colors.subText,
+      fontSize: 11,
+      marginBottom: 2,
+    },
+    totalRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+    },
+    totalCurrency: {
+      color: isDark ? "#a78bfa" : PURPLE_DARK,
+      fontSize: 12,
+      fontWeight: "700",
+      marginRight: 4,
+    },
+    totalPrice: {
+      color: colors.text,
+      fontSize: 22,
+      fontWeight: "900",
+    },
+    lanjutBtn: {
+      flexDirection: "row",
+      borderRadius: 18,
+      height: 54,
+      paddingHorizontal: 30,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    lanjutBtnActive: {
+      shadowColor: PURPLE,
+      shadowOpacity: 0.4,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
+    },
+    lanjutText: {
+      color: "#ffffff",
+      fontWeight: "800",
+      fontSize: 15,
+    },
+  });

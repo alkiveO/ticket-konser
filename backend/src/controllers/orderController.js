@@ -25,6 +25,8 @@ const checkout = async (req, res) => {
       data: order,
     });
   } catch (error) {
+    console.error("CHECKOUT ERROR:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,

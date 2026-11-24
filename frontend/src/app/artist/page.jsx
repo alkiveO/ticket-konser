@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "@/services/api";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
+import { Bricolage_Grotesque, Figtree } from "next/font/google";
 
 import {
   FaHome,
@@ -28,6 +29,17 @@ import {
   FaChevronDown,
 } from "react-icons/fa";
 
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+const body = Figtree({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const HD = "font-[family-name:var(--font-display)]";
+
 const EMPTY_FORM = {
   genre_id: "",
   name: "",
@@ -42,49 +54,25 @@ const getImageUrl = (filename) => {
   return `${base}/uploads/artists/${filename}`;
 };
 
-const SWAL_BASE_STYLE = `
-  .cx-popup { background:#141420 !important; border:1px solid rgba(255,255,255,0.08) !important; border-radius:24px !important; padding-bottom:1.75rem !important; }
-  .cx-title { color:#fff !important; font-weight:800 !important; }
-  .cx-text { color:#9ca3af !important; font-size:0.875rem !important; }
-  .cx-actions { gap:12px !important; }
-  .cx-btn { border-radius:12px !important; font-size:0.875rem !important; font-weight:600 !important; padding:11px 22px !important; box-shadow:none !important; transition:filter .15s !important; }
-  .cx-btn:hover { filter:brightness(1.1); }
-  .cx-btn-cancel { background:rgba(255,255,255,0.06) !important; color:#e5e7eb !important; }
-  .cx-btn-confirm-violet { background:linear-gradient(90deg,#7c3aed,#d946ef) !important; color:#fff !important; box-shadow:0 10px 25px -8px rgba(124,58,237,0.5) !important; }
-  .cx-btn-confirm-danger { background:linear-gradient(90deg,#dc2626,#e11d48) !important; color:#fff !important; box-shadow:0 10px 25px -8px rgba(220,38,38,0.5) !important; }
-`;
+// Tema SweetAlert supaya cocok dengan tampilan gelap
+const swalTheme = {
+  background: "#151D2E",
+  color: "#E8ECF4",
+  confirmButtonColor: "#F5B83D",
+  cancelButtonColor: "#2C3858",
+  customClass: { confirmButton: "!text-[#1A1305] !font-semibold" },
+};
 
-const deleteIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/>
-    </svg>
-  </div>
-`;
+const notify = (icon, title, text, extra = {}) =>
+  Swal.fire({ ...swalTheme, icon, title, text, ...extra });
 
-const successIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20 6 9 17l-5-5"/>
-    </svg>
-  </div>
-`;
+const INPUT_CLASS =
+  "w-full rounded-lg border border-[#2C3858] bg-[#0F1626] px-3.5 py-2.5 text-sm text-[#E8ECF4] outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 disabled:opacity-50 [color-scheme:dark]";
 
-const errorIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M18 6 6 18M6 6l12 12"/>
-    </svg>
-  </div>
-`;
+const LABEL_CLASS = "mb-1.5 block text-sm font-medium";
 
-const warningIconHtml = `
-  <div style="width:64px;height:64px;border-radius:9999px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
-    </svg>
-  </div>
-`;
+const ACTION_BTN =
+  "flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-white/[0.08] hover:text-[#F5B83D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D]";
 
 export default function ArtistPage() {
   const router = useRouter();
@@ -138,22 +126,7 @@ export default function ArtistPage() {
       setArtists(artistRes.data.data || []);
       setGenres(genreRes.data.data || []);
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal memuat data</p><p class="cx-text">Data artist tidak berhasil diambil dari server.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        showClass: { popup: "" },
-        customClass: {
-          popup: "cx-popup",
-          confirmButton: "cx-btn cx-btn-confirm-violet",
-        },
-        confirmButtonText: "Mengerti",
-        didOpen: () => {
-          const style = document.createElement("style");
-          style.innerHTML = SWAL_BASE_STYLE;
-          document.head.appendChild(style);
-        },
-      });
+      notify("error", "Gagal memuat data", "Data artis tidak berhasil diambil dari server.");
     } finally {
       setLoading(false);
     }
@@ -167,7 +140,7 @@ export default function ArtistPage() {
       });
       setArtists(res.data.data || []);
     } catch (err) {
-      Swal.fire("Error", "Gagal mengambil data artist", "error");
+      notify("error", "Error", "Gagal mengambil data artis");
     }
   };
 
@@ -207,26 +180,12 @@ export default function ArtistPage() {
 
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
     if (!allowedTypes.includes(file.type)) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Format salah</p><p class="cx-text">Foto harus JPG, PNG, atau WEBP.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Format salah", "Foto harus JPG, PNG, atau WEBP.");
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Terlalu besar</p><p class="cx-text">Ukuran foto maksimal 2MB.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Terlalu besar", "Ukuran foto maksimal 2MB.");
       return;
     }
 
@@ -265,14 +224,7 @@ export default function ArtistPage() {
 
   const validateForm = () => {
     if (!form.name.trim() || !form.genre_id) {
-      Swal.fire({
-        html: `${warningIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Data belum lengkap</p><p class="cx-text">Name dan genre wajib diisi.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
-        didOpen: injectSwalStyle,
-      });
+      notify("warning", "Data belum lengkap", "Nama dan genre wajib diisi.");
       return false;
     }
     return true;
@@ -294,41 +246,26 @@ export default function ArtistPage() {
 
       if (editId) {
         await api.put(`/artists/${editId}`, formData, { headers });
-        Swal.fire({
-          html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Berhasil diupdate</p><p class="cx-text">Data artist sudah tersimpan.</p>`,
-          background: "#141420",
-          buttonsStyling: false,
-          customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-          confirmButtonText: "Oke",
+        notify("success", "Berhasil diupdate", "Data artis sudah tersimpan.", {
           timer: 1800,
-          didOpen: injectSwalStyle,
+          showConfirmButton: false,
         });
       } else {
         await api.post("/artists", formData, { headers });
-        Swal.fire({
-          html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Artist ditambahkan</p><p class="cx-text">Musisi baru berhasil didaftarkan.</p>`,
-          background: "#141420",
-          buttonsStyling: false,
-          customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-          confirmButtonText: "Oke",
+        notify("success", "Artis ditambahkan", "Musisi baru berhasil didaftarkan.", {
           timer: 1800,
-          didOpen: injectSwalStyle,
+          showConfirmButton: false,
         });
       }
 
       closeModal();
       await getArtists();
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal menyimpan</p><p class="cx-text">${
-          err.response?.data?.message || "Terjadi kesalahan pada server."
-        }</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Mengerti",
-        didOpen: injectSwalStyle,
-      });
+      notify(
+        "error",
+        "Gagal menyimpan",
+        err.response?.data?.message || "Terjadi kesalahan pada server."
+      );
     } finally {
       setSaving(false);
     }
@@ -336,24 +273,16 @@ export default function ArtistPage() {
 
   const deleteArtist = async (id) => {
     const result = await Swal.fire({
-      html: `
-        ${deleteIconHtml}
-        <p class="cx-title" style="font-size:1.25rem;margin-bottom:6px;">Hapus artist ini?</p>
-        <p class="cx-text">Data dan foto yang sudah dihapus tidak bisa dikembalikan lagi.</p>
-      `,
+      ...swalTheme,
+      icon: "warning",
+      title: "Hapus artis ini?",
+      text: "Data dan foto yang sudah dihapus tidak bisa dikembalikan.",
       showCancelButton: true,
-      buttonsStyling: false,
       reverseButtons: true,
-      background: "#141420",
-      customClass: {
-        popup: "cx-popup",
-        actions: "cx-actions",
-        confirmButton: "cx-btn cx-btn-confirm-danger",
-        cancelButton: "cx-btn cx-btn-cancel",
-      },
-      confirmButtonText: "Ya, Hapus",
+      confirmButtonText: "Ya, hapus",
       cancelButtonText: "Batal",
-      didOpen: injectSwalStyle,
+      confirmButtonColor: "#DC2626",
+      customClass: {},
     });
 
     if (!result.isConfirmed) return;
@@ -365,48 +294,31 @@ export default function ArtistPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      Swal.fire({
-        html: `${successIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Artist dihapus</p><p class="cx-text">Data berhasil dihapus dari sistem.</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Oke",
+      notify("success", "Artis dihapus", "Data berhasil dihapus dari sistem.", {
         timer: 1800,
-        didOpen: injectSwalStyle,
+        showConfirmButton: false,
       });
       await getArtists();
     } catch (err) {
-      Swal.fire({
-        html: `${errorIconHtml}<p class="cx-title" style="font-size:1.15rem;margin-bottom:6px;">Gagal menghapus</p><p class="cx-text">${
-          err.response?.data?.message || "Terjadi kesalahan pada server."
-        }</p>`,
-        background: "#141420",
-        buttonsStyling: false,
-        customClass: { popup: "cx-popup", confirmButton: "cx-btn cx-btn-confirm-violet" },
-        confirmButtonText: "Mengerti",
-        didOpen: injectSwalStyle,
-      });
+      notify(
+        "error",
+        "Gagal menghapus",
+        err.response?.data?.message || "Terjadi kesalahan pada server."
+      );
     } finally {
       setDeletingId(null);
     }
   };
 
-  function injectSwalStyle() {
-    if (document.getElementById("cx-swal-style")) return;
-    const style = document.createElement("style");
-    style.id = "cx-swal-style";
-    style.innerHTML = SWAL_BASE_STYLE;
-    document.head.appendChild(style);
-  }
+  const rootClass = `${display.variable} ${body.variable} font-[family-name:var(--font-body)]`;
 
   if (loading) {
     return (
-      <div className="h-screen flex flex-col justify-center items-center gap-5 bg-[#0b0b13] text-white">
-        <div className="relative">
-          <div className="w-12 h-12 border-[3px] border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-          <div className="absolute inset-0 w-12 h-12 border-[3px] border-transparent border-b-fuchsia-500/40 rounded-full animate-spin [animation-direction:reverse] [animation-duration:1.2s]" />
-        </div>
-        <p className="text-sm text-gray-500 tracking-wide">Memuat data artist...</p>
+      <div
+        className={`${rootClass} flex h-screen flex-col items-center justify-center gap-4 bg-[#0C1220] text-[#E8ECF4]`}
+      >
+        <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-[#F5B83D]/25 border-t-[#F5B83D] motion-reduce:animate-none" />
+        <p className="text-sm text-[#8B96AD]">Memuat data artis...</p>
       </div>
     );
   }
@@ -421,23 +333,22 @@ export default function ArtistPage() {
     { href: "/manage-admin", icon: FaUserShield, label: "Manage Admin" },
   ];
 
-  return (
-    <div className="flex min-h-screen bg-[#0b0b13] text-white">
-      {/* SIDEBAR */}
-      <aside className="relative w-72 shrink-0 bg-[#0e0e16] border-r border-white/[0.06] flex flex-col">
-        <div className="pointer-events-none absolute -top-32 -left-32 w-80 h-80 rounded-full bg-violet-600/15 blur-[80px]" />
-        <div className="pointer-events-none absolute bottom-20 -left-20 w-60 h-60 rounded-full bg-fuchsia-600/10 blur-[60px]" />
+  const hasFilter = search || genreFilter !== "all";
 
-        <div className="p-7 border-b border-white/[0.06] relative">
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-600/40 rotate-3">
-              <FaTicketAlt size={16} className="text-white" />
-            </span>
-            Concert<span className="text-violet-400">X</span>
-          </h1>
+  return (
+    <div
+      className={`${rootClass} flex min-h-screen bg-[#0C1220] text-[#E8ECF4] selection:bg-[#F5B83D] selection:text-[#1A1305]`}
+    >
+      {/* ================= SIDEBAR ================= */}
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/[0.06] bg-[#101727]">
+        <div className="flex items-center gap-2.5 px-7 py-7">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F5B83D] text-[#1A1305]">
+            <FaTicketAlt size={15} />
+          </span>
+          <span className={`${HD} text-xl font-bold tracking-tight`}>Lokatix</span>
         </div>
 
-        <nav className="p-4 space-y-1 relative flex-1">
+        <nav className="flex-1 space-y-0.5 px-4">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/artist";
@@ -445,40 +356,39 @@ export default function ArtistPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative group w-full rounded-xl py-3 flex items-center gap-3.5 px-4 text-[13.5px] font-medium transition-all duration-200 ${
+                className={`relative flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5B83D] ${
                   active
-                    ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-600/30"
-                    : "text-gray-400 hover:bg-white/[0.04] hover:text-white"
+                    ? "bg-white/[0.07] text-white"
+                    : "text-[#8B96AD] hover:bg-white/[0.04] hover:text-white"
                 }`}
               >
                 {active && (
-                  <span className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-white" />
+                  <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#F5B83D]" />
                 )}
-                <Icon size={15} className={active ? "opacity-100" : "opacity-70 group-hover:opacity-100"} />
-                {item.label}
+                <Icon size={14} className={`shrink-0 ${active ? "text-[#F5B83D]" : ""}`} />
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 relative">
-          <div className="border-t border-dashed border-white/10 mb-4" />
+        <div className="p-4">
           <button
             onClick={logout}
-            className="w-full py-3 rounded-xl flex justify-center items-center gap-2.5 text-sm font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 transition-all duration-200"
+            className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-red-400/25 py-2.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
-            <FaSignOutAlt size={13} />
+            <FaSignOutAlt size={12} />
             Keluar
           </button>
         </div>
       </aside>
 
-      {/* CONTENT */}
-      <main className="flex-1 min-w-0 flex flex-col">
-        <header className="px-8 lg:px-10 py-6 flex flex-wrap justify-between items-center gap-4 border-b border-white/[0.06] bg-[#0b0b13]/80 backdrop-blur-xl sticky top-0 z-30">
+      {/* ================= CONTENT ================= */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] bg-[#0C1220]/85 px-10 py-6 backdrop-blur">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Manajemen Artis</h1>
-            <p className="text-gray-500 mt-1 text-sm">
+            <h1 className={`${HD} text-3xl font-bold tracking-tight`}>Artis</h1>
+            <p className="mt-1 text-sm text-[#8B96AD]">
               Kelola semua musisi yang tampil di konser.
             </p>
           </div>
@@ -487,52 +397,57 @@ export default function ArtistPage() {
             onClick={openAddModal}
             disabled={genres.length === 0}
             title={genres.length === 0 ? "Tambahkan genre terlebih dahulu" : ""}
-            className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-semibold transition-all shadow-lg shadow-violet-600/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-[#F5B83D] px-5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <FaPlus size={12} />
-            Tambah Artist
+            <FaPlus size={11} />
+            Tambah artis
           </button>
         </header>
 
-        <div className="p-6 lg:p-10 space-y-6 flex-1">
-          <div className="bg-[#141420] rounded-2xl border border-white/[0.06] p-4 flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[220px]">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm" />
+        <div className="flex-1 space-y-6 p-10">
+          {/* ===== SEARCH & FILTER ===== */}
+          <section className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#151D2E] p-5 ring-1 ring-white/[0.06]">
+            <div className="relative min-w-[220px] flex-1">
+              <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
               <input
                 type="text"
-                placeholder="Cari nama, genre, atau deskripsi..."
+                placeholder="Cari nama, genre, atau deskripsi"
+                aria-label="Cari artis"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="bg-white/[0.04] border border-white/10 rounded-xl pl-11 pr-4 py-2.5 w-full text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 placeholder:text-gray-500 transition"
+                className="h-11 w-full rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-4 text-sm outline-none transition placeholder:text-[#5E6A87] focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15"
               />
             </div>
 
             <div className="relative">
-              <FaFilter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none" />
+              <FaFilter className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-[#5E6A87]" />
               <select
                 value={genreFilter}
                 onChange={(e) => setGenreFilter(e.target.value)}
-                className="appearance-none bg-white/[0.04] border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 text-gray-300 transition cursor-pointer"
+                aria-label="Filter genre"
+                className="h-11 cursor-pointer appearance-none rounded-lg border border-[#2C3858] bg-[#0F1626] pl-9 pr-9 text-sm text-[#C9D1E3] outline-none transition focus:border-[#F5B83D] focus:ring-4 focus:ring-[#F5B83D]/15 [color-scheme:dark]"
               >
-                <option value="all">Semua Genre</option>
+                <option value="all">Semua genre</option>
                 {genres.map((genre) => (
                   <option key={genre.id} value={genre.id}>
                     {genre.name}
                   </option>
                 ))}
               </select>
+              <FaChevronDown className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-[#5E6A87]" />
             </div>
-          </div>
+          </section>
 
-          <div className="bg-[#141420] rounded-2xl border border-white/[0.06] overflow-hidden shadow-xl shadow-black/20">
+          {/* ===== TABEL ===== */}
+          <section className="overflow-hidden rounded-2xl bg-[#151D2E] ring-1 ring-white/[0.06]">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/[0.06] text-gray-500 text-[11px] uppercase tracking-wider">
-                    <th className="text-left py-4 px-6 font-semibold">Artist</th>
-                    <th className="text-left font-semibold">Genre</th>
-                    <th className="text-left font-semibold">Description</th>
-                    <th className="text-center pr-6 font-semibold w-28">Aksi</th>
+                  <tr className="border-b border-white/[0.06] text-xs text-[#5E6A87]">
+                    <th className="px-6 py-4 text-left font-medium">Artis</th>
+                    <th className="text-left font-medium">Genre</th>
+                    <th className="text-left font-medium">Deskripsi</th>
+                    <th className="w-28 pr-6 text-center font-medium">Aksi</th>
                   </tr>
                 </thead>
 
@@ -540,19 +455,17 @@ export default function ArtistPage() {
                   {paginated.length === 0 ? (
                     <tr>
                       <td colSpan="4" className="py-20">
-                        <div className="flex flex-col items-center text-center px-4">
-                          <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-4">
-                            <FaUserCircle className="text-gray-600" size={28} />
-                          </div>
-                          <p className="text-base font-semibold text-gray-300">
-                            {search || genreFilter !== "all"
-                              ? "Tidak ada artist yang cocok"
-                              : "Belum ada data artist"}
+                        <div className="flex flex-col items-center px-4 text-center">
+                          <FaUserCircle className="mb-3 text-[#5E6A87]" size={28} />
+                          <p className="text-sm font-semibold">
+                            {hasFilter
+                              ? "Tidak ada artis yang cocok"
+                              : "Belum ada data artis"}
                           </p>
-                          <p className="text-sm text-gray-500 mt-1.5 max-w-xs">
-                            {search || genreFilter !== "all"
+                          <p className="mt-1 max-w-xs text-xs text-[#8B96AD]">
+                            {hasFilter
                               ? "Coba ubah kata kunci atau filter genre."
-                              : "Klik tombol \"Tambah Artist\" untuk mendaftarkan musisi pertama."}
+                              : "Klik \"Tambah artis\" untuk mendaftarkan musisi pertama."}
                           </p>
                         </div>
                       </td>
@@ -563,16 +476,16 @@ export default function ArtistPage() {
                       return (
                         <tr
                           key={item.id}
-                          className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group"
+                          className="border-b border-white/[0.06] transition-colors last:border-0 hover:bg-white/[0.03]"
                         >
-                          <td className="py-4 px-6">
+                          <td className="px-6 py-4">
                             <div className="flex items-center gap-3.5">
-                              <div className="w-11 h-11 rounded-full overflow-hidden bg-gradient-to-br from-violet-600 to-fuchsia-600 shrink-0 flex items-center justify-center ring-2 ring-white/10 shadow-md">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1B2539] ring-1 ring-white/10">
                                 {imageUrl ? (
                                   <img
                                     src={imageUrl}
                                     alt={item.name}
-                                    className="w-full h-full object-cover"
+                                    className="h-full w-full object-cover"
                                     onError={(e) => {
                                       e.target.style.display = "none";
                                       e.target.nextSibling.style.display = "flex";
@@ -580,44 +493,46 @@ export default function ArtistPage() {
                                   />
                                 ) : null}
                                 <div
-                                  className="w-full h-full items-center justify-center text-white/80"
+                                  className="h-full w-full items-center justify-center text-[#5E6A87]"
                                   style={{ display: imageUrl ? "none" : "flex" }}
                                 >
                                   <FaUserCircle size={20} />
                                 </div>
                               </div>
-                              <p className="font-semibold text-[13.5px] truncate max-w-[180px]">
+                              <p className="max-w-[180px] truncate font-semibold">
                                 {item.name}
                               </p>
                             </div>
                           </td>
 
                           <td>
-                            <span className="inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/20">
+                            <span className="inline-flex rounded-md bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-[#C9D1E3]">
                               {item.genre_name}
                             </span>
                           </td>
 
-                          <td className="max-w-[260px] truncate text-gray-500 text-[13px]">
-                            {item.description || "—"}
+                          <td className="max-w-[260px] truncate text-[#8B96AD]">
+                            {item.description || "-"}
                           </td>
 
                           <td className="pr-6">
-                            <div className="flex justify-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                            <div className="flex justify-center gap-1">
                               <button
                                 onClick={() => openEditModal(item)}
-                                className="w-8.5 h-8.5 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white transition"
+                                className={ACTION_BTN}
                                 title="Edit"
+                                aria-label={`Edit ${item.name}`}
                               >
-                                <FaEdit size={13} />
+                                <FaEdit size={14} />
                               </button>
                               <button
                                 onClick={() => deleteArtist(item.id)}
                                 disabled={deletingId === item.id}
-                                className="w-8.5 h-8.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 flex items-center justify-center text-red-400 transition"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-red-400/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-40"
                                 title="Hapus"
+                                aria-label={`Hapus ${item.name}`}
                               >
-                                <FaTrash size={13} />
+                                <FaTrash size={14} />
                               </button>
                             </div>
                           </td>
@@ -629,25 +544,28 @@ export default function ArtistPage() {
               </table>
             </div>
 
-            <div className="flex flex-wrap justify-between items-center gap-3 px-6 py-4 border-t border-white/[0.06] text-sm text-gray-500">
-              <p className="text-[13px]">
+            {/* PAGINATION */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] px-6 py-4 text-sm text-[#8B96AD]">
+              <p>
                 Menampilkan{" "}
-                <span className="text-gray-300 font-medium">
+                <span className="font-medium text-[#E8ECF4]">
                   {paginated.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
                 </span>{" "}
-                –{" "}
-                <span className="text-gray-300 font-medium">
+                -{" "}
+                <span className="font-medium text-[#E8ECF4]">
                   {Math.min(page * PAGE_SIZE, filtered.length)}
                 </span>{" "}
                 dari{" "}
-                <span className="text-gray-300 font-medium">{filtered.length}</span> artist
+                <span className="font-medium text-[#E8ECF4]">{filtered.length}</span>{" "}
+                artis
               </p>
 
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition"
+                  aria-label="Halaman sebelumnya"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] transition hover:bg-white/[0.1] disabled:opacity-30"
                 >
                   <FaChevronLeft size={11} />
                 </button>
@@ -658,82 +576,80 @@ export default function ArtistPage() {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
+                      className={`h-8 w-8 rounded-lg text-xs font-semibold transition-colors ${
                         p === page
-                          ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-600/30"
-                          : "bg-white/5 hover:bg-white/10 text-gray-400"
+                          ? "bg-[#F5B83D] text-[#1A1305]"
+                          : "bg-white/[0.05] text-[#C9D1E3] hover:bg-white/[0.1]"
                       }`}
                     >
                       {p}
                     </button>
                   ))}
 
-                {totalPages > 5 && <span className="text-gray-600 px-1">…</span>}
+                {totalPages > 5 && <span className="px-1 text-[#5E6A87]">...</span>}
 
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 flex items-center justify-center transition"
+                  aria-label="Halaman berikutnya"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] transition hover:bg-white/[0.1] disabled:opacity-30"
                 >
                   <FaChevronRight size={11} />
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* MODAL */}
+        {/* ===== MODAL ===== */}
         {showModal && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget && !saving) closeModal();
             }}
           >
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+            <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
 
-            <div className="relative w-full max-w-[520px] bg-[#141420] border border-white/10 rounded-3xl shadow-2xl shadow-black/50 overflow-hidden">
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-violet-600" />
-
-              <div className="flex items-center justify-between px-7 pt-6 pb-2">
+            <div className="relative max-h-[90vh] w-full max-w-[520px] overflow-y-auto rounded-2xl border border-[#2C3858] bg-[#151D2E] shadow-2xl shadow-black/60">
+              <div className="flex items-start justify-between px-7 pb-2 pt-7">
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight">
-                    {editId ? "Edit Artist" : "Tambah Artist Baru"}
+                  <h2 className={`${HD} text-2xl font-bold tracking-tight`}>
+                    {editId ? "Edit artis" : "Tambah artis"}
                   </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {editId ? "Perbarui data musisi" : "Daftarkan musisi untuk konser"}
+                  <p className="mt-1 text-sm text-[#8B96AD]">
+                    {editId ? "Perbarui data musisi." : "Daftarkan musisi untuk konser."}
                   </p>
                 </div>
                 <button
                   onClick={closeModal}
                   disabled={saving}
-                  className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition disabled:opacity-40"
+                  aria-label="Tutup"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8B96AD] transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
                 >
                   <FaTimes size={14} />
                 </button>
               </div>
 
-              <div className="px-7 py-5 space-y-5">
-                <div className="flex flex-col items-center gap-3">
+              <div className="space-y-5 px-7 py-5">
+                <div className="flex flex-col items-center gap-2.5">
                   <div
                     onClick={() => !saving && fileInputRef.current?.click()}
-                    className="relative w-28 h-28 rounded-full border-2 border-dashed border-white/15 hover:border-violet-500/60 flex items-center justify-center overflow-hidden cursor-pointer transition-all group bg-white/[0.03]"
+                    className="group relative flex h-28 w-28 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-[#34415F] bg-[#0F1626] transition hover:border-[#F5B83D]"
                   >
                     {photoPreview ? (
                       <img
                         src={photoPreview}
                         alt="Preview"
-                        className="w-full h-full object-cover"
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="flex flex-col items-center gap-1 text-gray-600">
-                        <FaUserCircle size={42} />
-                      </div>
+                      <FaUserCircle size={40} className="text-[#34415F]" />
                     )}
-                    <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center backdrop-blur-sm">
-                        <FaCamera className="text-white" size={18} />
-                      </div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+                      <FaCamera className="text-white" size={18} />
                     </div>
                   </div>
 
@@ -750,101 +666,97 @@ export default function ArtistPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={saving}
-                    className="text-[13px] text-violet-400 font-medium hover:text-violet-300 transition disabled:opacity-50"
+                    className="text-sm font-semibold text-[#F5B83D] transition hover:text-[#FFC857] disabled:opacity-50"
                   >
-                    {photoPreview ? "Ganti foto" : "Upload foto artist"}
+                    {photoPreview ? "Ganti foto" : "Upload foto artis"}
                   </button>
-                  <p className="text-[11px] text-gray-600 -mt-1">JPG, PNG, WEBP • max 2MB</p>
+                  <p className="-mt-1 text-xs text-[#5E6A87]">JPG, PNG, atau WEBP, maks. 2MB</p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
-                      Nama Artist <span className="text-red-400">*</span>
+                    <label htmlFor="name" className={LABEL_CLASS}>
+                      Nama artis <span className="text-red-300">*</span>
                     </label>
                     <input
+                      id="name"
                       type="text"
                       name="name"
-                      placeholder="Contoh: Tulus, Raisa, Coldplay..."
+                      placeholder="Contoh: Tulus, Raisa, Coldplay"
                       value={form.name}
                       onChange={handleChange}
                       disabled={saving}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 placeholder:text-gray-600 transition disabled:opacity-50"
+                      className={INPUT_CLASS}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
-                      Genre <span className="text-red-400">*</span>
+                    <label htmlFor="genre_id" className={LABEL_CLASS}>
+                      Genre <span className="text-red-300">*</span>
                     </label>
                     <div className="relative">
                       <select
+                        id="genre_id"
                         name="genre_id"
                         value={form.genre_id}
                         onChange={handleChange}
                         disabled={saving}
-                        className="w-full appearance-none bg-white/[0.04] border border-white/10 rounded-xl pl-4 pr-11 py-3 text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 transition disabled:opacity-50 cursor-pointer text-white"
+                        className={`${INPUT_CLASS} cursor-pointer appearance-none pr-10`}
                       >
-                        <option value="" className="bg-[#141420] text-gray-400">
-                          — Pilih Genre —
-                        </option>
+                        <option value="">Pilih genre</option>
                         {genres.map((genre) => (
-                          <option
-                            key={genre.id}
-                            value={genre.id}
-                            className="bg-[#141420] text-white"
-                          >
+                          <option key={genre.id} value={genre.id}>
                             {genre.name}
                           </option>
                         ))}
                       </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
-                        <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center">
-                          <FaChevronDown size={11} className="text-gray-400" />
-                        </div>
-                      </div>
+                      <FaChevronDown
+                        size={11}
+                        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#5E6A87]"
+                      />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-0.5">
+                    <label htmlFor="description" className={LABEL_CLASS}>
                       Deskripsi
                     </label>
                     <textarea
+                      id="description"
                       name="description"
-                      placeholder="Ceritakan singkat tentang artist ini..."
+                      placeholder="Ceritakan singkat tentang artis ini"
                       value={form.description}
                       onChange={handleChange}
                       rows={3}
                       disabled={saving}
-                      className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 placeholder:text-gray-600 resize-none transition disabled:opacity-50"
+                      className={`${INPUT_CLASS} resize-none`}
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="px-7 py-5 border-t border-white/[0.06] bg-white/[0.02] flex justify-end gap-3">
+              <div className="flex justify-end gap-3 border-t border-white/[0.06] px-7 py-5">
                 <button
                   onClick={closeModal}
                   disabled={saving}
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium bg-white/5 hover:bg-white/10 text-gray-300 transition disabled:opacity-50"
+                  className="rounded-lg border border-[#2C3858] px-5 py-2.5 text-sm font-medium text-[#C9D1E3] transition hover:bg-white/[0.05] disabled:opacity-50"
                 >
                   Batal
                 </button>
                 <button
                   onClick={saveArtist}
                   disabled={saving}
-                  className="px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 shadow-lg shadow-violet-600/25 transition-all disabled:opacity-60 flex items-center gap-2 min-w-[120px] justify-center"
+                  className="flex min-w-[130px] items-center justify-center gap-2 rounded-lg bg-[#F5B83D] px-5 py-2.5 text-sm font-semibold text-[#1A1305] transition hover:bg-[#FFC857] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F5B83D]/30 disabled:opacity-60"
                 >
                   {saving ? (
                     <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#1A1305]/25 border-t-[#1A1305] motion-reduce:animate-none" />
                       Menyimpan
                     </>
                   ) : editId ? (
-                    "Simpan Perubahan"
+                    "Simpan perubahan"
                   ) : (
-                    "Tambah Artist"
+                    "Tambah artis"
                   )}
                 </button>
               </div>
